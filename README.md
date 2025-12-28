@@ -47,16 +47,20 @@ The service will be available at `http://localhost:5000`
 
 ### API Endpoints
 
-See [CONTINUATION.md](./CONTINUATION.md) for the complete public API specification.
+See `local/CONTINUATION.md` for the complete public API specification.
 
 ## Project Structure
 
 ```
 movie-agent-service/
 ├── README.md              # This file - how to run, what it does
-├── ARCHITECTURE.md        # System design (human-facing)
-├── DESIGN_DECISIONS.md    # WHY decisions were made
-├── CONTINUATION.md        # LLM + human checkpoint
+├── requirements.txt       # Python dependencies
+├── .env.example          # Environment variables template
+├── local/                 # Internal documents (gitignored)
+│   ├── ARCHITECTURE.md   # System design (human-facing)
+│   ├── DESIGN_DECISIONS.md # WHY decisions were made
+│   ├── CONTINUATION.md   # LLM + human checkpoint
+│   └── ...               # Other internal docs
 └── src/                   # Source code
     ├── app.py            # Flask application (thin UI layer)
     └── ...               # Service implementation
@@ -64,13 +68,14 @@ movie-agent-service/
 
 ## Documentation
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)**: High-level system design and component relationships
-- **[DESIGN_DECISIONS.md](./DESIGN_DECISIONS.md)**: Rationale behind architectural choices
-- **[CONTINUATION.md](./CONTINUATION.md)**: Current state, rules, and next steps (checkpoint document)
+Internal documentation is available in the `local/` directory (not tracked in git):
+- **ARCHITECTURE.md**: High-level system design and component relationships
+- **DESIGN_DECISIONS.md**: Rationale behind architectural choices
+- **CONTINUATION.md**: Current state, rules, and next steps (checkpoint document)
 
 ## Development Status
 
-This project is in active development. See [CONTINUATION.md](./CONTINUATION.md) for current implementation status and next steps.
+This project is in active development. See `local/CONTINUATION.md` for current implementation status and next steps.
 
 ## License
 

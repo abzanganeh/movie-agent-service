@@ -66,3 +66,6 @@ htmlcov/
 .cache/
 models/
 
+# Local/internal documents
+local/
+
