@@ -37,3 +37,5 @@ nest-asyncio>=1.5.0
 # Utilities
 python-dateutil>=2.8.0
 
+#testing
+pytest>=7.0.0

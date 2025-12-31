@@ -1,74 +1,96 @@
-from typing import Optional
+from typing import Optional, List
 from time import time
 
 from .config import MovieAgentConfig
-from .exceptions import AgentNotInitializedError
+from .exceptions import AgentNotInitializedError, VisionAnalystNotInitializedError
 from .schemas import ChatResponse, PosterAnalysisResponse
+from .tools import RetrieverTool, VisionTool
+from langchain_core.documents import Document
 
 
 class MovieAgentService:
     """
-    Facasde over the movie AI agent subsystem.
-    This class is the ONLY entry point for the UI layers.
+    Facade over the movie AI agent subsystem.
+    The ONLY entry point for the UI layers.
     """
-    
+
     def __init__(self, config: MovieAgentConfig):
         """
-        Composition Root.
-        All dependencies will be created and wired here.
+        Composition root.
+        All dependencies (tools, agent) are created and wired here.
         """
-        
         self.config = config
-        
-        # I nternal components ( to be initialized later)
-        self._agent = None
-        self._vector_store = None
-        self._vision_analyst = None
-        
+
+        # Internal components (initialized later)
+        self._agent: Optional[object] = None
+        self._vector_store: Optional[RetrieverTool] = None
+        self._vision_analyst: Optional[VisionTool] = None
+
         if self.config.warmup_on_start:
             self.warmup()
-    
+
+    # ----------------------------
+    # Cold-start / Warmup
+    # ----------------------------
     def warmup(self) -> None:
         """
-        Preload heavy resources (models, vector store).
+        Preload heavy resources (models, vector store, etc.).
         Cold-start mitigation hook.
         """
-        # Placeholder for future implementation
+        # Placeholders for actual initialization
         self._agent = "Initialized"
         return None
-    
-    def chat(self, user_message: str) -> chatResponse:
+
+    # ----------------------------
+    # Query handling
+    # ----------------------------
+    def chat(self, user_message: str) -> ChatResponse:
         """
         Process a user query and return a structured response.
+        Orchestrates retrieval and agent reasoning.
         """
         if not self._agent:
             raise AgentNotInitializedError("Agent is not initialized.")
-        
+
         start_time = time()
-        # PLACEHOLDER: real agent logic comes later
+
+        # Step 1: Retrieve candidate documents if vector store exists
+        movies: List[Document] = []
+        if self._vector_store:
+            movies = self._vector_store.retrieve(user_message, k=5)
+
+        # Step 2: Placeholder for actual agent reasoning (ReAct / LLM)
         answer = "Agent logic not implemented yet."
-        movies = []
         reasoning_type = "skeleton"
+
         latency_ms = int((time() - start_time) * 1000)
-        
+
         return ChatResponse(
             answer=answer,
             movies=movies,
             latency_ms=latency_ms,
             reasoning_type=reasoning_type
         )
-    
+
+    # ----------------------------
+    # Poster / Vision analysis
+    # ----------------------------
     def analyze_poster(self, image_path: str) -> PosterAnalysisResponse:
         """
-        Analyze a movie poster and infer metadata.
-
+        Analyze a movie poster and infer metadata using the vision analyst tool.
         """
         if not self._vision_analyst:
             raise VisionAnalystNotInitializedError("Vision analyst is not initialized.")
 
-        # PLACEHOLDER
-        return PosterAnalysisResponse(
-            inferred_genres=[],
-            mood="unknown",
-            confidence=0.0,
-        )
+        return self._vision_analyst.analyze_poster(image_path)
+
+    # ----------------------------
+    # Dependency injection setters
+    # ----------------------------
+    def set_vector_store(self, vector_store: RetrieverTool) -> None:
+        """Inject a retrieval tool."""
+        self._vector_store = vector_store
+
+    def set_vision_analyst(self, vision_tool: VisionTool) -> None:
+        """Inject a vision analysis tool."""
+        self._vision_analyst = vision_tool

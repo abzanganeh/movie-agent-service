@@ -7,7 +7,7 @@ class ChatResponse:
     answer: str
     movies: List[str]
     reasoning_type: str
-    latency_ms: Opional[int] = None
+    latency_ms: Optional[int] = None
     
     
 @dataclass
