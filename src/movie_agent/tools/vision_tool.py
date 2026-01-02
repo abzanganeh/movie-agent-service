@@ -6,5 +6,4 @@ class VisionTool(Protocol):
     def analyze_poster(self, image_path: str) -> PosterAnalysisResponse:
         ...
 
-# Placeholder for concrete implementations
 

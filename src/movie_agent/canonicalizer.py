@@ -1,5 +1,5 @@
 from typing import List
-from src.movie_agent.models import Movie
+from .models import Movie
 from langchain_core.documents import Document
 
 class MovieCanonicalizer:

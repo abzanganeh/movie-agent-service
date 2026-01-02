@@ -6,6 +6,9 @@ from .exceptions import AgentNotInitializedError, VisionAnalystNotInitializedErr
 from .schemas import ChatResponse, PosterAnalysisResponse
 from .tools import RetrieverTool, VisionTool
 from langchain_core.documents import Document
+from .agent.react_agent import MovieReactAgent
+from .agent.prompts import MOVIE_REACT_PROMPT
+from langchain.memory import ConversationBufferMemory
 
 
 class MovieAgentService:
@@ -29,52 +32,73 @@ class MovieAgentService:
         if self.config.warmup_on_start:
             self.warmup()
 
-    # ----------------------------
     # Cold-start / Warmup
-    # ----------------------------
-    def warmup(self) -> None:
-        """
-        Preload heavy resources (models, vector store, etc.).
-        Cold-start mitigation hook.
-        """
-        # Placeholders for actual initialization
-        self._agent = "Initialized"
-        return None
+    from langchain.memory import ConversationBufferMemory
+from .tools.impl import MovieSearchTool, PosterAnalysisTool
+from .agent.react_agent import MovieReactAgent
 
-    # ----------------------------
+
+def warmup(self) -> None:
+    """
+    Preload heavy resources (models, vector store, etc.).
+    Cold-start mitigation hook.
+    """
+    if self._agent:
+        return
+
+    if not self._vector_store:
+        raise RuntimeError("Retriever tool must be injected before warmup.")
+
+    # --- Tool Adapters (LangChain-visible) ---
+
+    tools = []
+
+    # Retrieval is mandatory
+    search_tool = MovieSearchTool(self._vector_store)
+    tools.append(search_tool)
+
+    # Vision is optional and config-gated
+    if self.config.enable_vision:
+        if not self._vision_analyst:
+            raise RuntimeError(
+                "Vision tool must be injected when enable_vision=True."
+            )
+        vision_tool = PosterAnalysisTool(self._vision_analyst)
+        tools.append(vision_tool)
+
+    # --- Agent Construction ---
+
+    self._agent = MovieReactAgent(
+        llm=self.config.llm,
+        tools=tools,
+        memory=ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+        ),
+        verbose=self.config.verbose,
+    )
+
+
     # Query handling
-    # ----------------------------
     def chat(self, user_message: str) -> ChatResponse:
-        """
-        Process a user query and return a structured response.
-        Orchestrates retrieval and agent reasoning.
-        """
         if not self._agent:
             raise AgentNotInitializedError("Agent is not initialized.")
 
         start_time = time()
 
-        # Step 1: Retrieve candidate documents if vector store exists
-        movies: List[Document] = []
-        if self._vector_store:
-            movies = self._vector_store.retrieve(user_message, k=5)
-
-        # Step 2: Placeholder for actual agent reasoning (ReAct / LLM)
-        answer = "Agent logic not implemented yet."
-        reasoning_type = "skeleton"
+        result = self._agent.run(user_message)
 
         latency_ms = int((time() - start_time) * 1000)
 
         return ChatResponse(
-            answer=answer,
-            movies=movies,
+            answer=result["answer"],
+            movies=result["movies"],
             latency_ms=latency_ms,
-            reasoning_type=reasoning_type
+            reasoning_type="react",
         )
 
-    # ----------------------------
+
     # Poster / Vision analysis
-    # ----------------------------
     def analyze_poster(self, image_path: str) -> PosterAnalysisResponse:
         """
         Analyze a movie poster and infer metadata using the vision analyst tool.
@@ -84,9 +108,7 @@ class MovieAgentService:
 
         return self._vision_analyst.analyze_poster(image_path)
 
-    # ----------------------------
     # Dependency injection setters
-    # ----------------------------
     def set_vector_store(self, vector_store: RetrieverTool) -> None:
         """Inject a retrieval tool."""
         self._vector_store = vector_store
