@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 from .agent.react_agent import MovieReactAgent
 from .agent.prompts import MOVIE_REACT_PROMPT
 from langchain.memory import ConversationBufferMemory
+from .tools.impl import MovieSearchTool, PosterAnalysisTool
 
 
 class MovieAgentService:
@@ -32,51 +33,38 @@ class MovieAgentService:
         if self.config.warmup_on_start:
             self.warmup()
 
-    # Cold-start / Warmup
-    from langchain.memory import ConversationBufferMemory
-from .tools.impl import MovieSearchTool, PosterAnalysisTool
-from .agent.react_agent import MovieReactAgent
+    def warmup(self) -> None:
+        """
+        Preload heavy resources (models, vector store, etc.).
+        Cold-start mitigation hook.
+        """
+        if self._agent:
+            return
 
+        if not self._vector_store:
+            raise RuntimeError("Retriever tool must be injected before warmup.")
 
-def warmup(self) -> None:
-    """
-    Preload heavy resources (models, vector store, etc.).
-    Cold-start mitigation hook.
-    """
-    if self._agent:
-        return
+        tools = []
 
-    if not self._vector_store:
-        raise RuntimeError("Retriever tool must be injected before warmup.")
+        search_tool = MovieSearchTool(retriever=self._vector_store)
+        tools.append(search_tool)
 
-    # --- Tool Adapters (LangChain-visible) ---
+        if self.config.enable_vision:
+            if not self._vision_analyst:
+                raise RuntimeError("Vision tool must be injected when enable_vision=True.")
+            vision_tool = PosterAnalysisTool(vision_tool=self._vision_analyst)
+            tools.append(vision_tool)
 
-    tools = []
-
-    # Retrieval is mandatory
-    search_tool = MovieSearchTool(self._vector_store)
-    tools.append(search_tool)
-
-    # Vision is optional and config-gated
-    if self.config.enable_vision:
-        if not self._vision_analyst:
-            raise RuntimeError(
-                "Vision tool must be injected when enable_vision=True."
-            )
-        vision_tool = PosterAnalysisTool(self._vision_analyst)
-        tools.append(vision_tool)
-
-    # --- Agent Construction ---
-
-    self._agent = MovieReactAgent(
-        llm=self.config.llm,
-        tools=tools,
-        memory=ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-        ),
-        verbose=self.config.verbose,
-    )
+        # Create prompt with tool names
+        prompt = MOVIE_REACT_PROMPT.partial(tool_names=[t.name for t in tools])
+        
+        self._agent = MovieReactAgent(
+            llm=self.config.llm,
+            tools=tools,
+            prompt=prompt,
+            memory=ConversationBufferMemory(memory_key="chat_history", return_messages=True),
+            verbose=self.config.verbose,
+        )
 
 
     # Query handling

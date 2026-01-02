@@ -1,9 +1,6 @@
 from langchain_core.prompts import PromptTemplate
 
 
-# agent/prompts.py
-from langchain_core.prompts import PromptTemplate
-
 MOVIE_REACT_PROMPT = PromptTemplate.from_template(
     """
 You are a movie expert AI assistant.
