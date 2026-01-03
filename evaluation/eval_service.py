@@ -12,41 +12,34 @@ class EvalMovieAgentService(MovieAgentService):
         if self._agent:
             return
 
-        # Use dummy tools for evaluation
-        # Create tools from injected dummy retriever/vision_tool
+        # Create tools from injected retriever/vision_tool
         tools = []
         if self._vector_store:
             tools.append(MovieSearchTool(retriever=self._vector_store))
         if self._vision_analyst:
             tools.append(PosterAnalysisTool(vision_tool=self._vision_analyst))
 
-        # Fill tool_names for the prompt
         prompt = MOVIE_REACT_PROMPT.partial(tool_names=[t.name for t in tools])
 
-        # Use dummy LLM / prompt / memory for evaluation
-        from langchain.memory import ConversationBufferMemory
-        from langchain.agents import AgentExecutor, create_react_agent
-        
-        # Create the agent RunnableSequence
-        agent_runnable = create_react_agent(
+        from langchain.agents import AgentExecutor, create_openai_tools_agent
+
+        agent_runnable = create_openai_tools_agent(
             llm=self.config.llm,
             tools=tools,
             prompt=prompt,
         )
-        
-        # Wrap in AgentExecutor to handle ReAct loop execution
+
         agent_executor = AgentExecutor(
             agent=agent_runnable,
             tools=tools,
             verbose=self.config.verbose,
-            handle_parsing_errors=True
+            handle_parsing_errors=True,
         )
-        
-        # Create a minimal wrapper to match MovieReactAgent interface
+
         class AgentWrapper:
             def __init__(self, executor):
                 self.executor = executor
-        
+
         self._agent = AgentWrapper(agent_executor)
 
     # Override chat to handle AgentExecutor

@@ -21,6 +21,11 @@ class MovieSearchTool(BaseTool):
     # Pydantic v2 requires declared fields for assignment
     retriever: Any = Field(default=None)
     top_k: int = Field(default=5)
+
+    def __init__(self, retriever, top_k: int = 5, **kwargs):
+        super().__init__(**kwargs)
+        self.retriever = retriever
+        self.top_k = int(top_k)
     
     def _run(self, query: str) -> str:
         results: List[Document] = self.retriever.retrieve(query, k=self.top_k)

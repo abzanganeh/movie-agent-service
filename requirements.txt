@@ -30,6 +30,7 @@ Pillow>=10.0.0
 # Vision Models (optional - for local BLIP)
 transformers>=4.35,<5
 torch==2.2.2
+Pillow>=10.0.0
 
 # Async Support
 nest-asyncio>=1.5.0
