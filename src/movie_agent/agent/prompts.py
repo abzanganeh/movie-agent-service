@@ -7,7 +7,7 @@ MOVIE_REACT_PROMPT = PromptTemplate.from_template(
 You are a movie expert AI assistant.
 
 Available tools (call at most one):
-{tools}
+{tool_names}
 
 Instructions:
 - Decide if a tool is needed; if so, pick exactly one tool from: {tool_names}
@@ -29,5 +29,7 @@ Rules:
 - Keep responses concise and factual.
 
 Question: {input}
+
+{agent_scratchpad}
 """
 )
