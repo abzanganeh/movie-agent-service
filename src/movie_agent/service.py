@@ -4,7 +4,16 @@ from time import time
 from .config import MovieAgentConfig
 from .exceptions import AgentNotInitializedError, VisionAnalystNotInitializedError
 from .schemas import ChatResponse, PosterAnalysisResponse
-from .tools import RetrieverTool, VisionTool
+from .tools import (
+    RetrieverTool,
+    VisionTool,
+    GenerateMovieQuizTool,
+    CheckQuizAnswerTool,
+    CompareMoviesTool,
+    SearchActorTool,
+    SearchDirectorTool,
+    SearchYearTool,
+)
 from langchain_core.documents import Document
 from .agent.tool_calling_agent import ToolCallingAgent
 from .agent.prompts import MOVIE_REACT_PROMPT
@@ -49,6 +58,14 @@ class MovieAgentService:
         search_tool = MovieSearchTool(retriever=self._vector_store)
         tools.append(search_tool)
 
+        # Optional capability expansion tools (Colab parity)
+        tools.append(GenerateMovieQuizTool(retriever=self._vector_store))
+        tools.append(CheckQuizAnswerTool())
+        tools.append(CompareMoviesTool(retriever=self._vector_store))
+        tools.append(SearchActorTool(retriever=self._vector_store))
+        tools.append(SearchDirectorTool(retriever=self._vector_store))
+        tools.append(SearchYearTool(retriever=self._vector_store))
+
         if self.config.enable_vision:
             if not self._vision_analyst:
                 raise RuntimeError("Vision tool must be injected when enable_vision=True.")
@@ -65,7 +82,6 @@ class MovieAgentService:
             llm=self.config.llm,
             tools=tools,
             prompt=prompt,
-            memory=ConversationBufferMemory(memory_key="chat_history", return_messages=True),
             verbose=self.config.verbose,
         )
 
@@ -76,15 +92,21 @@ class MovieAgentService:
             raise AgentNotInitializedError("Agent is not initialized.")
 
         start_time = time()
-
         result = self._agent.run(user_message)
+        total_latency_ms = int((time() - start_time) * 1000)
 
-        latency_ms = int((time() - start_time) * 1000)
+        # Extract precise latency breakdown from agent result
+        # Tool latency is now tracked via LangChain callbacks
+        llm_latency = result.get("llm_latency_ms")
+        tool_latency = result.get("tool_latency_ms")
 
         return ChatResponse(
             answer=result["answer"],
             movies=result["movies"],
-            latency_ms=latency_ms,
+            tools_used=result.get("tools_used", []),
+            llm_latency_ms=llm_latency,
+            tool_latency_ms=tool_latency,
+            latency_ms=total_latency_ms,
             reasoning_type="tool_calling",
         )
 

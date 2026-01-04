@@ -31,9 +31,39 @@ class AgentOutputParser:
             except Exception:
                 metadata[key] = value.strip()
 
+        # Normalize tools_used to always be a list
+        tools_used_raw = metadata.get("tools_used", [])
+        if isinstance(tools_used_raw, str):
+            # Try to parse string representation of list
+            try:
+                tools_used = ast.literal_eval(tools_used_raw)
+                if not isinstance(tools_used, list):
+                    tools_used = [tools_used_raw]
+            except Exception:
+                tools_used = [tools_used_raw] if tools_used_raw else []
+        elif isinstance(tools_used_raw, list):
+            tools_used = tools_used_raw
+        else:
+            tools_used = []
+
+        # Normalize movies to always be a list
+        movies_raw = metadata.get("movies", [])
+        if isinstance(movies_raw, str):
+            try:
+                movies = ast.literal_eval(movies_raw)
+                if not isinstance(movies, list):
+                    movies = []
+            except Exception:
+                # If parsing fails, treat as empty list (safe default)
+                movies = []
+        elif isinstance(movies_raw, list):
+            movies = movies_raw
+        else:
+            movies = []
+
         return {
             "answer": answer_part.replace("FINAL ANSWER:", "").strip(),
-            "movies": metadata.get("movies", []),
+            "movies": movies,
             "confidence": metadata.get("confidence"),
-            "tools_used": metadata.get("tools_used", []),
+            "tools_used": tools_used,
         }

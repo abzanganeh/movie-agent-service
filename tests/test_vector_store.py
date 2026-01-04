@@ -27,9 +27,10 @@ def test_build_and_retrieve(tmp_path, documents):
     # Build index
     store.build(documents)
 
-    # Retrieve
-    retriever = store.as_retriever(k=1)
-    results = retriever.get_relevant_documents("dream")
+    # Retrieve using new API
+    langchain_vectorstore = store.get_langchain_vectorstore()
+    retriever = langchain_vectorstore.as_retriever(search_kwargs={"k": 1})
+    results = retriever.invoke("dream")
 
     assert len(results) == 1
     assert "Title:" in results[0].page_content

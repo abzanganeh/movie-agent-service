@@ -49,6 +49,62 @@ The service will be available at `http://localhost:5000`
 
 See `local/CONTINUATION.md` for the complete public API specification.
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    User Query (Text/Image)                    │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│              MovieAgentService (Facade Layer)                │
+│  - Entry point for UI                                        │
+│  - Dependency injection                                      │
+│  - Response formatting                                       │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ToolCallingAgent (Orchestration)                │
+│  - Single-step tool selection                                │
+│  - LLM-based routing                                         │
+│  - Output parsing                                            │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+        ┌───────────────────┴───────────────────┐
+        │                                       │
+        ▼                                       ▼
+┌──────────────────────┐          ┌──────────────────────┐
+│   Search Tools       │          │   Vision Tools        │
+│  - movie_search      │          │  - analyze_poster     │
+│  - search_actor      │          │                       │
+│  - search_director  │          └───────────┬───────────┘
+│  - search_year       │                      │
+└───────────┬──────────┘                      │
+            │                                  │
+            ▼                                  ▼
+┌──────────────────────┐          ┌──────────────────────┐
+│  MovieRetriever      │          │  BLIPVisionTool       │
+│  (Protocol Impl)     │          │  (Vision Protocol)    │
+└───────────┬──────────┘          └───────────┬───────────┘
+            │                                 │
+            ▼                                 │
+┌──────────────────────┐                     │
+│  MovieVectorStore     │◄────────────────────┘
+│  (FAISS Storage)     │  (Title inference via retriever)
+└──────────────────────┘
+            │
+            ▼
+┌──────────────────────┐
+│   Data Sources        │
+│  - movies.csv         │
+│  - FAISS index        │
+│  - Embeddings (OpenAI)│
+└──────────────────────┘
+```
+
 ## Project Structure
 
 ```
