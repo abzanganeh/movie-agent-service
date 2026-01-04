@@ -6,6 +6,7 @@ Provides a simple command-line interface to interact with the movie agent.
 Demonstrates the agent's capabilities in a user-friendly way.
 """
 import os
+import sys
 from dotenv import load_dotenv
 
 # Imports assume PYTHONPATH=src is set (e.g., PYTHONPATH=src python demo/cli_demo.py)
