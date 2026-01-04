@@ -25,4 +25,9 @@ class MovieAgentConfig:
     # Performance
     warmup_on_start: bool = True
     
+    # Semantic Resolution (Fuzzy Matching)
+    enable_fuzzy_matching: bool = True
+    fuzzy_threshold: float = field(default=0.75)  # Minimum score for fuzzy matches (0.0-1.0)
+    resolution_confidence_threshold: float = field(default=0.75)  # Minimum confidence to accept resolution
+    
     

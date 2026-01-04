@@ -42,6 +42,12 @@ class MovieSearchTool(BaseTool):
             for doc in results
         ]
         return "; ".join(summaries)
+    
+    def get_last_resolution_metadata(self):
+        """Get resolution metadata from the last retrieve() call."""
+        if hasattr(self.retriever, 'get_last_resolution_metadata'):
+            return self.retriever.get_last_resolution_metadata()
+        return None
 
     async def _arun(self, query: str) -> str:
         return self._run(query)

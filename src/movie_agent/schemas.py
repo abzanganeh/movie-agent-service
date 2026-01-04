@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional, List
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any
 
 
 @dataclass
@@ -11,6 +11,7 @@ class ChatResponse:
     llm_latency_ms: Optional[int] = None
     tool_latency_ms: Optional[int] = None
     latency_ms: Optional[int] = None
+    resolution_metadata: Optional[Dict[str, Any]] = None
     
     
 @dataclass

@@ -6,6 +6,7 @@ from PIL import Image
 
 from .vision_tool import VisionTool  # protocol
 from ..schemas import PosterAnalysisResponse
+from ..resolution import MovieTitleResolver
 
 
 class BLIPVisionTool(VisionTool):
@@ -24,7 +25,7 @@ class BLIPVisionTool(VisionTool):
         model_path: Optional[str] = None,
         model: Any = None,
         device: Optional[str] = None,
-        retriever: Any = None,
+        title_resolver: Optional[MovieTitleResolver] = None,
     ):
         """
         Initialize BLIP vision tool.
@@ -33,11 +34,12 @@ class BLIPVisionTool(VisionTool):
         :param model_path: Optional local path to model files
         :param model: Optional pre-loaded model dict (for dependency injection/testing)
         :param device: Device to run on ("cuda", "cpu", or None for auto-detect)
+        :param title_resolver: Optional MovieTitleResolver for caption → title inference
         """
         self.model_name = model_name or "Salesforce/blip-image-captioning-base"
         self.model_path = model_path
         self.device = device or self._detect_device()
-        self._retriever = retriever
+        self._title_resolver = title_resolver
         
         # Dependency injection: allow pre-loaded model for testing
         if model is not None:
@@ -219,23 +221,28 @@ class BLIPVisionTool(VisionTool):
 
     def _infer_title_from_caption(self, caption: str) -> Optional[str]:
         """
-        Use the retriever to guess the movie title from the caption.
+        Use SemanticResolver to infer movie title from BLIP caption.
+        
+        This is the semantic resolution layer for vision title inference:
+        BLIP Caption → SemanticResolver → Canonical Title
+        
+        :param caption: BLIP-generated caption from poster image
+        :return: Canonical movie title if resolved with confidence, None otherwise
         """
-        if not self._retriever:
+        if not self._title_resolver:
             return None
+        
         try:
-            results = self._retriever.retrieve(caption, k=1)
-            if not results:
-                return None
-            top = results[0]
-            meta = getattr(top, "metadata", {}) or {}
-            title = meta.get("title")
-            year = meta.get("year")
-            if title and year:
-                return f"{title} ({year})"
-            return title
+            # Use semantic resolver to match caption against movie titles
+            result = self._title_resolver.resolve(caption)
+            
+            if result.is_confident():
+                return result.canonical_value
+            
+            # If resolution not confident, return None (fail soft)
+            return None
         except Exception:
-            # Fail soft; keep vision output even if retrieval fails
+            # Fail soft; keep vision output even if resolution fails
             return None
 
     def _format_response(

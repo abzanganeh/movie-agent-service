@@ -4,27 +4,128 @@ Interactive CLI demo for Movie Agent Service.
 
 Provides a simple command-line interface to interact with the movie agent.
 Demonstrates the agent's capabilities in a user-friendly way.
+
+Logging:
+    Interactions are logged to a file. Set LOG_FILE environment variable
+    to specify the log file path, or use --log-file command-line argument.
+    Default: logs/cli_demo_YYYYMMDD_HHMMSS.log
 """
 import os
 import sys
+import json
+import argparse
+from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Imports assume PYTHONPATH=src is set (e.g., PYTHONPATH=src python demo/cli_demo.py)
-from movie_agent.llm_factory import get_llm_instance
-from movie_agent.vision_factory import create_vision_tool
-from movie_agent.retriever_factory import create_retriever
+# Public API import - this is the only import clients should use
+from movie_agent.app import MovieAgentApp
 from movie_agent.config import MovieAgentConfig
-from movie_agent.vector_store import MovieVectorStore
-from movie_agent.data_loader import MovieDataLoader
-from movie_agent.canonicalizer import build_documents
-from movie_agent.chunking import MovieChunker
-from movie_agent.service import MovieAgentService
+from movie_agent.interaction import IntentRouter, IntentType
 
 # Load environment variables
 load_dotenv()
 
 
-def print_banner():
+class InteractionLogger:
+    """Logs CLI interactions to a file."""
+    
+    def __init__(self, log_file: str):
+        """Initialize logger with log file path."""
+        self.log_file = Path(log_file)
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.session_start = datetime.now()
+        
+        # Write session header
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"Session started: {self.session_start.isoformat()}\n")
+            f.write(f"{'='*80}\n\n")
+    
+    def log_query(self, query: str, query_type: str = "chat"):
+        """Log a user query."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": query_type,
+            "query": query,
+        }
+        self._write_entry(entry)
+    
+    def log_response(self, response, query: str, query_type: str = "chat"):
+        """Log an agent response."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": f"{query_type}_response",
+            "query": query,
+            "answer": response.answer if hasattr(response, 'answer') else str(response),
+            "movies": response.movies if hasattr(response, 'movies') else [],
+            "tools_used": response.tools_used if hasattr(response, 'tools_used') else [],
+            "llm_latency_ms": response.llm_latency_ms if hasattr(response, 'llm_latency_ms') else None,
+            "tool_latency_ms": response.tool_latency_ms if hasattr(response, 'tool_latency_ms') else None,
+            "latency_ms": response.latency_ms if hasattr(response, 'latency_ms') else None,
+        }
+        
+        # Add resolution metadata if available
+        if hasattr(response, 'resolution_metadata') and response.resolution_metadata:
+            entry["resolution_metadata"] = response.resolution_metadata
+        
+        # For poster analysis responses
+        if hasattr(response, 'title'):
+            entry["title"] = response.title
+        if hasattr(response, 'inferred_genres'):
+            entry["inferred_genres"] = response.inferred_genres
+        if hasattr(response, 'mood'):
+            entry["mood"] = response.mood
+        if hasattr(response, 'confidence'):
+            entry["confidence"] = response.confidence
+        
+        self._write_entry(entry)
+    
+    def log_error(self, query: str, error: Exception, query_type: str = "chat"):
+        """Log an error."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "error",
+            "query": query,
+            "error": str(error),
+            "error_type": type(error).__name__,
+        }
+        self._write_entry(entry)
+    
+    def _write_entry(self, entry: dict):
+        """Write a log entry to file."""
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    
+    def close(self):
+        """Close the log session."""
+        session_end = datetime.now()
+        duration = (session_end - self.session_start).total_seconds()
+        
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"Session ended: {session_end.isoformat()}\n")
+            f.write(f"Duration: {duration:.2f} seconds\n")
+            f.write(f"{'='*80}\n\n")
+
+
+def get_log_file_path(log_file_arg: str = None) -> str:
+    """Get log file path from argument or environment variable."""
+    if log_file_arg:
+        return log_file_arg
+    
+    log_file = os.getenv("LOG_FILE")
+    if log_file:
+        return log_file
+    
+    # Default: create timestamped log file in logs/ directory
+    logs_dir = Path("logs")
+    logs_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return str(logs_dir / f"cli_demo_{timestamp}.log")
+
+
+def print_banner(log_file: str = None):
     """Print welcome banner."""
     print("\n" + "=" * 60)
     print("  Movie Agent Service - Interactive CLI Demo")
@@ -36,6 +137,8 @@ def print_banner():
     print("  • Compare movies")
     print("  • Search by actor, director, or year")
     print("\nType 'quit' or 'exit' to end the session.")
+    if log_file:
+        print(f"\n📝 Logging interactions to: {log_file}")
     print("-" * 60 + "\n")
 
 
@@ -58,71 +161,32 @@ def print_response(response, query):
     print("-" * 60)
 
 
-def setup_service():
-    """Set up and initialize the movie agent service."""
+def setup_app():
+    """Set up and initialize the movie agent app."""
     print("🚀 Initializing Movie Agent Service...")
     
-    # Load configuration
-    config = MovieAgentConfig(
-        movies_csv_path=os.getenv("MOVIE_DATA_CSV_PATH", "data/movies.csv"),
-        warmup_on_start=False,
-        enable_vision=True,
-        vision_model_name=os.getenv("VISION_MODEL_NAME", "Salesforce/blip-image-captioning-base"),
-        vision_model_path=os.getenv("VISION_MODEL_PATH", None),
-        faiss_index_path=os.getenv("VECTOR_STORE_PATH", "movie_vectorstore"),
-    )
+    # Load configuration from environment (with validation)
+    # Uses professional config loader with helpful error messages
+    from movie_agent.config_loader import load_config_from_env
     
-    # Build vector store if it doesn't exist
-    vector_store_path = config.faiss_index_path
-    if not os.path.exists(vector_store_path):
-        print(f"📦 Building FAISS index at {vector_store_path}...")
-        
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
-        if embedding_provider == "openai":
-            from langchain_openai import OpenAIEmbeddings
-            embedding_model = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
-        else:
-            raise ValueError(f"Unknown embedding provider: {embedding_provider}")
-        
-        loader = MovieDataLoader(config.movies_csv_path)
-        movies = loader.load_movies()
-        documents = build_documents(movies)
-        
-        chunker = MovieChunker()
-        chunked_docs = chunker.chunk(documents)
-        
-        vector_store = MovieVectorStore(
-            embedding_model=embedding_model,
-            index_path=vector_store_path
-        )
-        vector_store.build_or_load(chunked_docs)
-        print("✅ FAISS index built successfully!")
+    config = load_config_from_env()
     
-    # Create service
-    service = MovieAgentService(config)
+    # Override specific settings for CLI demo
+    config.warmup_on_start = False
+    config.enable_vision = True
     
-    # Inject production tools
-    retriever = create_retriever(config=config)
-    service.set_vector_store(retriever)
+    # Create app (handles all internal wiring)
+    app = MovieAgentApp(config)
     
-    vision_tool = create_vision_tool(config)
-    service.set_vision_analyst(vision_tool)
-    
-    # Inject LLM
-    config.llm = get_llm_instance(
-        provider=config.llm_provider,
-        model=config.llm_model
-    )
-    
-    # Warmup
-    print("🔥 Warming up agent...")
-    service.warmup()
+    # Initialize (builds vector store, creates tools, warms up)
+    print("🔥 Initializing agent...")
+    app.initialize()
     print("✅ Ready!\n")
     
-    return service
+    return app
 
 
-def handle_poster_query(service, query):
+def handle_poster_query(app, query, logger: InteractionLogger = None):
     """Handle poster analysis queries."""
     # Extract poster path from query
     if "poster" in query.lower() and "path" in query.lower():
@@ -137,17 +201,29 @@ def handle_poster_query(service, query):
         if path_idx and path_idx < len(parts):
             poster_path = parts[path_idx]
             try:
-                response = service.analyze_poster(poster_path)
+                if logger:
+                    logger.log_query(query, query_type="poster")
+                
+                response = app.analyze_poster(poster_path)
+                
                 print(f"\n📽️  Query: {query}")
                 print(f"🎬 Title: {response.title or 'Unknown'}")
                 print(f"🎭 Genres: {', '.join(response.inferred_genres)}")
                 print(f"😊 Mood: {response.mood}")
                 print(f"📊 Confidence: {response.confidence:.2f}")
                 print("-" * 60)
+                
+                if logger:
+                    logger.log_response(response, query, query_type="poster")
+                
                 return True
             except Exception as e:
                 print(f"\n❌ Error analyzing poster: {e}")
                 print("-" * 60)
+                
+                if logger:
+                    logger.log_error(query, e, query_type="poster")
+                
                 return True
     
     return False
@@ -155,46 +231,154 @@ def handle_poster_query(service, query):
 
 def main():
     """Main CLI loop."""
-    print_banner()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Interactive CLI demo for Movie Agent Service",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default log file (logs/cli_demo_TIMESTAMP.log)
+  python demo/cli_demo.py
+
+  # Specify custom log file
+  python demo/cli_demo.py --log-file my_session.log
+
+  # Disable logging
+  python demo/cli_demo.py --no-log
+
+Environment Variables:
+  LOG_FILE: Path to log file (overridden by --log-file)
+        """
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        help="Path to log file (default: logs/cli_demo_TIMESTAMP.log)"
+    )
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Disable logging"
+    )
+    args = parser.parse_args()
+    
+    # Setup logging
+    logger = None
+    log_file = None
+    if not args.no_log:
+        log_file = get_log_file_path(args.log_file)
+        logger = InteractionLogger(log_file)
+    
+    # Create intent router (deterministic, no LLM)
+    router = IntentRouter()
+    
+    print_banner(log_file)
     
     try:
-        service = setup_service()
+        app = setup_app()
     except Exception as e:
-        print(f"\n❌ Failed to initialize service: {e}")
+        print(f"\n❌ Failed to initialize app: {e}")
         print("Please check your environment variables and configuration.")
+        if logger:
+            logger.log_error("initialization", e)
+            logger.close()
         return 1
     
     # Interactive loop
-    while True:
-        try:
-            query = input("You: ").strip()
-            
-            if not query:
-                continue
-            
-            # Check for exit commands
-            if query.lower() in ['quit', 'exit', 'q']:
-                print("\n👋 Thanks for using Movie Agent Service! Goodbye!\n")
-                break
-            
-            # Handle poster queries
-            if handle_poster_query(service, query):
-                continue
-            
-            # Handle regular chat queries
+    try:
+        while True:
             try:
-                response = service.chat(query)
-                print_response(response, query)
-            except Exception as e:
-                print(f"\n❌ Error: {e}")
-                print("-" * 60)
-        
-        except KeyboardInterrupt:
-            print("\n\n👋 Interrupted. Goodbye!\n")
-            break
-        except EOFError:
-            print("\n\n👋 Goodbye!\n")
-            break
+                query = input("You: ").strip()
+                
+                if not query:
+                    continue
+                
+                # Check for exit commands
+                if query.lower() in ['quit', 'exit', 'q']:
+                    print("\n👋 Thanks for using Movie Agent Service! Goodbye!\n")
+                    break
+                
+                # Route intent before agent call
+                intent = router.route(query)
+                
+                # Handle greeting (no agent call needed)
+                if intent == IntentType.GREETING:
+                    print("\n👋 Hi! I can help you with:")
+                    print("  • Movie recommendations and searches")
+                    print("  • Movie quizzes and games")
+                    print("  • Comparing movies")
+                    print("  • Movie statistics")
+                    print("  • Analyzing movie posters")
+                    print("\nWhat would you like to do?\n")
+                    print("-" * 60)
+                    if logger:
+                        logger.log_query(query, query_type="greeting")
+                    continue
+                
+                # Handle unknown/misunderstood queries (no agent call)
+                if intent == IntentType.UNKNOWN:
+                    print("\n❓ I can help with:")
+                    print("  • Movie searches (e.g., 'find sci-fi movies')")
+                    print("  • Movie quizzes (e.g., 'play game' or 'quiz')")
+                    print("  • Comparing movies (e.g., 'compare Inception vs Matrix')")
+                    print("  • Statistics (e.g., 'stats movies by year')")
+                    print("  • Poster analysis (e.g., 'analyze poster at path/to/image.png')")
+                    print("\nPlease try a more specific query.\n")
+                    print("-" * 60)
+                    if logger:
+                        logger.log_query(query, query_type="unknown")
+                    continue
+                
+                # Handle poster analysis
+                if intent == IntentType.POSTER_ANALYSIS:
+                    if handle_poster_query(app, query, logger):
+                        continue
+                    # If poster extraction failed, fall through to agent
+                
+                # Handle game intent (route to quiz tools)
+                if intent == IntentType.GAME:
+                    # Let agent handle with quiz tools
+                    if logger:
+                        logger.log_query(query, query_type="game")
+                    try:
+                        response = app.chat(query)
+                        print_response(response, query)
+                        if logger:
+                            logger.log_response(response, query, query_type="game")
+                    except Exception as e:
+                        print(f"\n❌ Error: {e}")
+                        print("-" * 60)
+                        if logger:
+                            logger.log_error(query, e, query_type="game")
+                    continue
+                
+                # Handle all other intents (movie search, compare, stats) via agent
+                try:
+                    if logger:
+                        logger.log_query(query, query_type="chat")
+                    
+                    response = app.chat(query)
+                    print_response(response, query)
+                    
+                    if logger:
+                        logger.log_response(response, query, query_type="chat")
+                except Exception as e:
+                    print(f"\n❌ Error: {e}")
+                    print("-" * 60)
+                    
+                    if logger:
+                        logger.log_error(query, e, query_type="chat")
+            
+            except KeyboardInterrupt:
+                print("\n\n👋 Interrupted. Goodbye!\n")
+                break
+            except EOFError:
+                print("\n\n👋 Goodbye!\n")
+                break
+    finally:
+        if logger:
+            logger.close()
+            print(f"\n📝 Session logged to: {log_file}\n")
     
     return 0
 

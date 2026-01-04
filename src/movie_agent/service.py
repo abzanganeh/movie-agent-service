@@ -4,6 +4,7 @@ from time import time
 from .config import MovieAgentConfig
 from .exceptions import AgentNotInitializedError, VisionAnalystNotInitializedError
 from .schemas import ChatResponse, PosterAnalysisResponse
+from .models import Movie
 from .tools import (
     RetrieverTool,
     VisionTool,
@@ -13,6 +14,7 @@ from .tools import (
     SearchActorTool,
     SearchDirectorTool,
     SearchYearTool,
+    MovieStatisticsTool,
 )
 from langchain_core.documents import Document
 from .agent.tool_calling_agent import ToolCallingAgent
@@ -38,6 +40,7 @@ class MovieAgentService:
         self._agent: Optional[object] = None
         self._vector_store: Optional[RetrieverTool] = None
         self._vision_analyst: Optional[VisionTool] = None
+        self._movies: Optional[List[Movie]] = None
 
         if self.config.warmup_on_start:
             self.warmup()
@@ -57,6 +60,7 @@ class MovieAgentService:
 
         search_tool = MovieSearchTool(retriever=self._vector_store)
         tools.append(search_tool)
+        self._search_tool = search_tool  # Store reference for metadata access
 
         # Optional capability expansion tools (Colab parity)
         tools.append(GenerateMovieQuizTool(retriever=self._vector_store))
@@ -65,13 +69,14 @@ class MovieAgentService:
         tools.append(SearchActorTool(retriever=self._vector_store))
         tools.append(SearchDirectorTool(retriever=self._vector_store))
         tools.append(SearchYearTool(retriever=self._vector_store))
+        
+        # Statistics tool (requires movie dataset)
+        if self._movies:
+            tools.append(MovieStatisticsTool(movies=self._movies))
 
         if self.config.enable_vision:
             if not self._vision_analyst:
                 raise RuntimeError("Vision tool must be injected when enable_vision=True.")
-            # If the vision tool supports retrieval-backed title inference, inject the retriever.
-            if hasattr(self._vision_analyst, "_retriever") and getattr(self._vision_analyst, "_retriever") is None:
-                setattr(self._vision_analyst, "_retriever", self._vector_store)
             vision_tool = PosterAnalysisTool(vision_tool=self._vision_analyst)
             tools.append(vision_tool)
 
@@ -99,6 +104,13 @@ class MovieAgentService:
         # Tool latency is now tracked via LangChain callbacks
         llm_latency = result.get("llm_latency_ms")
         tool_latency = result.get("tool_latency_ms")
+        
+        # Extract resolution metadata if available
+        resolution_metadata = None
+        if hasattr(self, '_search_tool') and self._search_tool:
+            metadata = self._search_tool.get_last_resolution_metadata()
+            if metadata:
+                resolution_metadata = metadata.to_dict()
 
         return ChatResponse(
             answer=result["answer"],
@@ -108,6 +120,7 @@ class MovieAgentService:
             tool_latency_ms=tool_latency,
             latency_ms=total_latency_ms,
             reasoning_type="tool_calling",
+            resolution_metadata=resolution_metadata,
         )
 
 
@@ -129,3 +142,7 @@ class MovieAgentService:
     def set_vision_analyst(self, vision_tool: VisionTool) -> None:
         """Inject a vision analysis tool."""
         self._vision_analyst = vision_tool
+    
+    def set_movies(self, movies: List[Movie]) -> None:
+        """Inject movie dataset for statistics tool."""
+        self._movies = movies

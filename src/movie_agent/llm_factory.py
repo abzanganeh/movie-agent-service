@@ -28,9 +28,11 @@ def get_llm_instance(provider: str, model: str) -> Any:
         if ChatGroq is None:
             raise ImportError("langchain_groq not installed")
         
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise RuntimeError("GROQ_API_KEY not set in environment")
+        from .config_validator import get_required_env
+        api_key = get_required_env(
+            "GROQ_API_KEY",
+            description="Groq API key for LLM (get from https://console.groq.com/keys)"
+        )
         
         # Validate Groq model name format
         valid_groq_models = [
@@ -54,9 +56,11 @@ def get_llm_instance(provider: str, model: str) -> Any:
     elif provider == "openai":
         if ChatOpenAI is None:
             raise ImportError("langchain_openai not installed")
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY not set in environment")
+        from .config_validator import get_required_env
+        api_key = get_required_env(
+            "OPENAI_API_KEY",
+            description="OpenAI API key for LLM (get from https://platform.openai.com/api-keys)"
+        )
         return ChatOpenAI(
             model_name=model,
             openai_api_key=api_key,

@@ -10,6 +10,8 @@ from .search_tools import (
     SearchDirectorTool,
     SearchYearTool,
 )
+from .movie_statistics import MovieStatisticsTool
+from .impl import MovieSearchTool, PosterAnalysisTool
 
 __all__ = [
     "RetrieverTool",
@@ -20,4 +22,7 @@ __all__ = [
     "SearchActorTool",
     "SearchDirectorTool",
     "SearchYearTool",
+    "MovieStatisticsTool",
+    "MovieSearchTool",
+    "PosterAnalysisTool",
 ]

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from src.movie_agent.llm_factory import get_llm_instance
 from src.movie_agent.vision_factory import create_vision_tool
 from src.movie_agent.retriever_factory import create_retriever
+from src.movie_agent.resolution import create_title_resolver
 from src.movie_agent.config import MovieAgentConfig
 from src.movie_agent.vector_store import MovieVectorStore
 from src.movie_agent.data_loader import MovieDataLoader
@@ -58,26 +59,31 @@ if not os.path.exists(vector_store_path):
 # Step 2 — Service instance
 service = EvalMovieAgentService(config)
 
-# Step 3 — Inject production tools using factories
+# Step 3 — Build semantic resolver (for query correction and title inference)
+title_resolver = create_title_resolver(config=config)
+
+# Step 4 — Inject production tools using factories
 
 # FAISS-backed Retriever - factory handles embedding model creation
-retriever = create_retriever(config=config)
+# Inject title_resolver for query correction and entity normalization
+retriever = create_retriever(config=config, title_resolver=title_resolver)
 service.set_vector_store(retriever)
 
-# Vision tool - using factory function (inject retriever for title inference)
-vision_tool = create_vision_tool(config, retriever=retriever)
+# Vision tool - using factory function
+# Inject title_resolver for caption → title inference
+vision_tool = create_vision_tool(config, title_resolver=title_resolver)
 service.set_vision_analyst(vision_tool)
 
-# Step 4 — Inject LLM using factory
+# Step 5 — Inject LLM using factory
 config.llm = get_llm_instance(
     provider=config.llm_provider,
     model=config.llm_model
 )
 
-# Step 5 — Warmup
+# Step 6 — Warmup
 service.warmup()
 
-# Step 6 — Evaluation queries
+# Step 7 — Evaluation queries
 queries = [
     "Recommend sci-fi movies like Inception",
     "Find action movies from 2020 onwards",

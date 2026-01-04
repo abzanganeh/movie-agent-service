@@ -6,12 +6,14 @@ from .data_loader import MovieDataLoader
 from .canonicalizer import build_documents
 from .chunking import MovieChunker
 from .config import MovieAgentConfig
+from .resolution import VocabularyBuilder, MovieTitleResolver
 
 
 def create_retriever(
     config: Optional[MovieAgentConfig] = None,
     embedding_model=None,
-    vector_store: Optional[MovieVectorStore] = None
+    vector_store: Optional[MovieVectorStore] = None,
+    title_resolver: Optional[MovieTitleResolver] = None,
 ) -> MovieRetriever:
     """
     Factory function to create a configured MovieRetriever instance.
@@ -33,9 +35,11 @@ def create_retriever(
         
         if embedding_provider == "openai":
             from langchain_openai import OpenAIEmbeddings
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise RuntimeError("OPENAI_API_KEY not set in environment")
+            from .config_validator import get_required_env
+            api_key = get_required_env(
+                "OPENAI_API_KEY",
+                description="OpenAI API key for embeddings (get from https://platform.openai.com/api-keys)"
+            )
             embedding_model = OpenAIEmbeddings(openai_api_key=api_key)
         elif embedding_provider == "huggingface":
             raise NotImplementedError("HuggingFace embeddings not yet implemented")
@@ -84,4 +88,5 @@ def create_retriever(
             vector_store.load()
     
     # Create retriever (implements RetrieverTool protocol directly)
-    return MovieRetriever(vector_store=vector_store, k=5)
+    # Title resolver is optional - if provided, enables query correction and entity normalization
+    return MovieRetriever(vector_store=vector_store, k=5, title_resolver=title_resolver)

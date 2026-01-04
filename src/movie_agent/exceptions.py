@@ -8,3 +8,12 @@ class AgentNotInitializedError(MovieAgentError):
 
 class VisionAnalystNotInitializedError(MovieAgentError):
     """Raised when vision analyst is used before initialization."""
+
+
+class ConfigurationError(MovieAgentError):
+    """
+    Raised when configuration is invalid or missing.
+    
+    Provides actionable error messages to help users fix configuration issues.
+    """
+    pass

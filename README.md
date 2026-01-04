@@ -28,9 +28,41 @@ cd movie-agent-service
 # Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
+# Set up configuration
+# Option 1: Copy .env.example to .env and fill in your keys
+cp .env.example .env
+# Then edit .env with your actual API keys
+
+# Option 2: Set environment variables directly
 export OPENAI_API_KEY="your-key-here"
-export GROQ_API_KEY="your-key-here"  # Optional
+export GROQ_API_KEY="your-key-here"
+```
+
+### Using the Public API
+
+The public API is accessed through `MovieAgentApp`, which is the single stable entry point:
+
+```python
+from movie_agent.app import MovieAgentApp
+from movie_agent.config import MovieAgentConfig
+
+# Create configuration
+config = MovieAgentConfig(
+    movies_csv_path="data/movies.csv",
+    enable_vision=True,
+)
+
+# Create and initialize app
+app = MovieAgentApp(config)
+app.initialize()
+
+# Use the app
+response = app.chat("Find sci-fi movies like Inception")
+print(response.answer)
+
+# Analyze poster
+poster_response = app.analyze_poster("path/to/poster.png")
+print(poster_response.title)
 ```
 
 ### Running the Demo
@@ -47,6 +79,11 @@ The CLI demo provides an interactive loop where you can:
 - Analyze movie posters (e.g., "Analyze poster at path data/posters/test_poster01.png")
 - Generate quizzes, compare movies, search by actor/director/year
 - Type `quit` or `exit` to end the session
+
+**Logging**: All interactions are automatically logged to `logs/cli_demo_TIMESTAMP.log` in JSON format. You can:
+- Specify a custom log file: `python demo/cli_demo.py --log-file my_session.log`
+- Disable logging: `python demo/cli_demo.py --no-log`
+- Set log file via environment variable: `export LOG_FILE=my_session.log`
 
 #### Evaluation Scripts
 
@@ -67,8 +104,14 @@ PYTHONPATH=src python -m evaluation.run
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              MovieAgentService (Facade Layer)                │
-│  - Entry point for UI                                        │
+│              MovieAgentApp (Public API)                      │
+│  - Single stable entry point                                 │
+│  - Encapsulates all internal wiring                          │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│              MovieAgentService (Internal Facade)             │
 │  - Dependency injection                                      │
 │  - Response formatting                                       │
 └───────────────────────────┬─────────────────────────────────┘
