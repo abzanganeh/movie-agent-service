@@ -6,13 +6,9 @@ Provides a simple command-line interface to interact with the movie agent.
 Demonstrates the agent's capabilities in a user-friendly way.
 """
 import os
-import sys
-from pathlib import Path
 from dotenv import load_dotenv
 
-# Add src to path (when PYTHONPATH=src, imports should be from movie_agent, not src.movie_agent)
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
+# Imports assume PYTHONPATH=src is set (e.g., PYTHONPATH=src python demo/cli_demo.py)
 from movie_agent.llm_factory import get_llm_instance
 from movie_agent.vision_factory import create_vision_tool
 from movie_agent.retriever_factory import create_retriever
