@@ -6,7 +6,7 @@ from .output_parser import AgentOutputParser
 from .prompts import MOVIE_REACT_PROMPT
 
 
-class MovieReactAgent:
+class ToolCallingAgent:
     """
     Single-tool calling agent (no ReAct loop).
     Chooses exactly one tool based on the prompt and returns a parsed result.
@@ -30,8 +30,11 @@ class MovieReactAgent:
         """
         Constructs a LangChain tool-calling agent with provided tools and prompt.
         """
+        # Bind tools with auto tool choice to reduce function-call errors
+        llm_with_tools = self._llm.bind_tools(self._tools, tool_choice="auto")
+
         agent_runnable = create_openai_tools_agent(
-            llm=self._llm,
+            llm=llm_with_tools,
             tools=self._tools,
             prompt=self._prompt,
         )

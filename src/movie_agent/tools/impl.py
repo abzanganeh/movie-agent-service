@@ -1,10 +1,14 @@
 from typing import List, Optional, Any
-from pydantic import Field
+from pydantic import Field, BaseModel
 from langchain.tools import BaseTool
 from langchain_core.documents import Document
 from .retriever_tool import RetrieverTool
 from .vision_tool import VisionTool
 from ..schemas import PosterAnalysisResponse
+
+
+class MovieSearchArgs(BaseModel):
+    query: str
 
 
 class MovieSearchTool(BaseTool):
@@ -27,6 +31,8 @@ class MovieSearchTool(BaseTool):
         self.retriever = retriever
         self.top_k = int(top_k)
     
+    args_schema: type[BaseModel] = MovieSearchArgs
+
     def _run(self, query: str) -> str:
         results: List[Document] = self.retriever.retrieve(query, k=self.top_k)
         if not results:
@@ -41,6 +47,10 @@ class MovieSearchTool(BaseTool):
         return self._run(query)
 
 
+class PosterAnalysisArgs(BaseModel):
+    image_path: str
+
+
 class PosterAnalysisTool(BaseTool):
     name: str = "analyze_movie_poster"
     description: str = (
@@ -49,12 +59,15 @@ class PosterAnalysisTool(BaseTool):
     )
     vision_tool: Any = Field(default=None)
 
+    args_schema: type[BaseModel] = PosterAnalysisArgs
+
     def _run(self, image_path: str) -> str:
         try:
             response: PosterAnalysisResponse = self.vision_tool.analyze_poster(image_path)
+            title = response.title or "Unknown"
             genres = ", ".join(response.inferred_genres)
             return (
-                f"Genres: {genres}. Mood: {response.mood}. "
+                f"Title: {title}. Genres: {genres}. Mood: {response.mood}. "
                 f"Confidence: {response.confidence:.2f}"
             )
         except Exception as e:

@@ -21,5 +21,5 @@ def test_agent_service_chat_executes_agent():
     response = service.chat("recommend a movie")
 
     assert response.answer == "Agent response"
-    assert response.reasoning_type == "react"
+    assert response.reasoning_type == "tool_calling"
     assert response.latency_ms >= 0

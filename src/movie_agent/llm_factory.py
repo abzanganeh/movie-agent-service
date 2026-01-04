@@ -45,7 +45,11 @@ def get_llm_instance(provider: str, model: str) -> Any:
             print(f"Warning: Model '{model}' not in known Groq models. "
                   f"Known models: {valid_groq_models}")
         
-        return ChatGroq(model=model, api_key=api_key)
+        return ChatGroq(
+            model=model,
+            api_key=api_key,
+            streaming=False,  # disable streaming to reduce function-call issues
+        )
     
     elif provider == "openai":
         if ChatOpenAI is None:
@@ -53,7 +57,11 @@ def get_llm_instance(provider: str, model: str) -> Any:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set in environment")
-        return ChatOpenAI(model_name=model, openai_api_key=api_key)
+        return ChatOpenAI(
+            model_name=model,
+            openai_api_key=api_key,
+            streaming=False,
+        )
 
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")

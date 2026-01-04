@@ -1,7 +1,7 @@
 from src.movie_agent.config import MovieAgentConfig
 from evaluation.eval_service import EvalMovieAgentService
 from evaluation.dummy_tools import DummyRetriever, DummyVisionTool
-from evaluation.dummy_llm import DummyLLM
+from evaluation.dummy_llm import DummyChatModel
 
 # Step 1 — Evaluation config
 config = MovieAgentConfig(
@@ -9,7 +9,7 @@ config = MovieAgentConfig(
     warmup_on_start=False,
     enable_vision=True
 )
-config.llm = DummyLLM()  # LangChain-compatible dummy LLM
+config.llm = DummyChatModel()  # LangChain-compatible dummy chat model
 config.verbose = False  # Disable verbose output for cleaner evaluation
 
 # Step 2 — Create evaluation service

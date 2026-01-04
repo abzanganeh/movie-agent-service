@@ -36,11 +36,7 @@ class EvalMovieAgentService(MovieAgentService):
             handle_parsing_errors=True,
         )
 
-        class AgentWrapper:
-            def __init__(self, executor):
-                self.executor = executor
-
-        self._agent = AgentWrapper(agent_executor)
+        self._agent = agent_executor
 
     # Override chat to handle AgentExecutor
     def chat(self, user_message: str) -> ChatResponse:
@@ -51,7 +47,7 @@ class EvalMovieAgentService(MovieAgentService):
 
         # AgentExecutor.invoke() expects dict with "input" key
         # Returns dict with "output" key
-        result_dict = self._agent.executor.invoke({"input": user_message})
+        result_dict = self._agent.invoke({"input": user_message})
         
         # Extract the output string from the result
         raw_output = result_dict.get("output", str(result_dict))
@@ -64,5 +60,5 @@ class EvalMovieAgentService(MovieAgentService):
             answer=result["answer"],
             movies=result["movies"],
             latency_ms=latency_ms,
-            reasoning_type="react",
+            reasoning_type="tool_calling",
         )

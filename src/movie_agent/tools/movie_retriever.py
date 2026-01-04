@@ -41,4 +41,5 @@ class MovieRetriever(RetrieverTool):
             search_kwargs={"k": k}
         )
         
-        return langchain_retriever.get_relevant_documents(query)
+        # LangChain deprecates get_relevant_documents; invoke is the current API.
+        return langchain_retriever.invoke(query)

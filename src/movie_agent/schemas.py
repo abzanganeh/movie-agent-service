@@ -15,3 +15,4 @@ class PosterAnalysisResponse:
     inferred_genres: List[str]
     mood: str
     confidence: float
+    title: Optional[str] = None

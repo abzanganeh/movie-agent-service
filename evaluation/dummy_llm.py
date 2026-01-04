@@ -1,43 +1,36 @@
-from langchain_core.language_models import BaseLanguageModel
 from typing import Any, List, Optional
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
 
-class DummyLLM(BaseLanguageModel):
-    """LangChain-compatible dummy LLM for evaluation."""
+
+class DummyChatModel(BaseChatModel):
+    """LangChain-compatible dummy chat model for evaluation (no tool calls)."""
 
     @property
     def _llm_type(self) -> str:
-        return "dummy"
+        return "dummy-chat"
 
-    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return f"Dummy LLM response to: {prompt}"
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        # Always return a simple message; no tool_calls emitted.
+        generation = ChatGeneration(message=AIMessage(content="Dummy response"))
+        return ChatResult(generations=[generation])
 
-    async def _acall(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return f"Dummy async response to: {prompt}"
-
-    # Required abstract methods
-    def predict(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return self._call(prompt, stop=stop)
-
-    async def apredict(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return await self._acall(prompt, stop=stop)
-
-    def generate_prompt(self, prompt: Any, stop: Optional[List[str]] = None) -> str:
-        return str(prompt)
-
-    async def agenerate_prompt(self, prompt: Any, stop: Optional[List[str]] = None) -> str:
-        return str(prompt)
-
-    def predict_messages(self, messages: Any, stop: Optional[List[str]] = None) -> str:
-        return "Dummy response"
-
-    async def apredict_messages(self, messages: Any, stop: Optional[List[str]] = None) -> str:
-        return "Dummy async response"
-
-    def invoke(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return self._call(prompt, stop)
-
-    async def ainvoke(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return await self._acall(prompt, stop)
+    async def _agenerate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        return self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
     def bind(self, **kwargs: Any):
+        # Support bind_tools() compatibility; return self unchanged.
         return self

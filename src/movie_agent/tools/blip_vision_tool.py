@@ -23,7 +23,8 @@ class BLIPVisionTool(VisionTool):
         model_name: Optional[str] = None,
         model_path: Optional[str] = None,
         model: Any = None,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        retriever: Any = None,
     ):
         """
         Initialize BLIP vision tool.
@@ -36,6 +37,7 @@ class BLIPVisionTool(VisionTool):
         self.model_name = model_name or "Salesforce/blip-image-captioning-base"
         self.model_path = model_path
         self.device = device or self._detect_device()
+        self._retriever = retriever
         
         # Dependency injection: allow pre-loaded model for testing
         if model is not None:
@@ -50,7 +52,6 @@ class BLIPVisionTool(VisionTool):
     def _detect_device(self) -> str:
         """Detect available device (CUDA or CPU)."""
         try:
-            import torch
             return "cuda" if torch.cuda.is_available() else "cpu"
         except ImportError:
             return "cpu"
@@ -216,12 +217,34 @@ class BLIPVisionTool(VisionTool):
         # Cap at 0.95 (never 100% certain)
         return min(confidence, 0.95)
 
+    def _infer_title_from_caption(self, caption: str) -> Optional[str]:
+        """
+        Use the retriever to guess the movie title from the caption.
+        """
+        if not self._retriever:
+            return None
+        try:
+            results = self._retriever.retrieve(caption, k=1)
+            if not results:
+                return None
+            top = results[0]
+            meta = getattr(top, "metadata", {}) or {}
+            title = meta.get("title")
+            year = meta.get("year")
+            if title and year:
+                return f"{title} ({year})"
+            return title
+        except Exception:
+            # Fail soft; keep vision output even if retrieval fails
+            return None
+
     def _format_response(
         self,
         caption: str,
         genres: list[str],
         mood: str,
-        confidence: float
+        confidence: float,
+        title: Optional[str] = None,
     ) -> PosterAnalysisResponse:
         """
         Format inference results into PosterAnalysisResponse.
@@ -230,7 +253,8 @@ class BLIPVisionTool(VisionTool):
         return PosterAnalysisResponse(
             inferred_genres=genres,
             mood=mood,
-            confidence=confidence
+            confidence=confidence,
+            title=title,
         )
 
     def analyze_poster(self, image_path: str) -> PosterAnalysisResponse:
@@ -258,6 +282,7 @@ class BLIPVisionTool(VisionTool):
         genres = self._extract_genres_from_caption(caption)
         mood = self._infer_mood_from_caption(caption)
         confidence = self._calculate_confidence(caption, genres)
+        title = self._infer_title_from_caption(caption)
         
         # Step 4: Format and return response
-        return self._format_response(caption, genres, mood, confidence)
+        return self._format_response(caption, genres, mood, confidence, title)

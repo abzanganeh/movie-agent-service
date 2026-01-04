@@ -6,7 +6,7 @@ from .exceptions import AgentNotInitializedError, VisionAnalystNotInitializedErr
 from .schemas import ChatResponse, PosterAnalysisResponse
 from .tools import RetrieverTool, VisionTool
 from langchain_core.documents import Document
-from .agent.react_agent import MovieReactAgent
+from .agent.tool_calling_agent import ToolCallingAgent
 from .agent.prompts import MOVIE_REACT_PROMPT
 from langchain.memory import ConversationBufferMemory
 from .tools.impl import MovieSearchTool, PosterAnalysisTool
@@ -52,13 +52,16 @@ class MovieAgentService:
         if self.config.enable_vision:
             if not self._vision_analyst:
                 raise RuntimeError("Vision tool must be injected when enable_vision=True.")
+            # If the vision tool supports retrieval-backed title inference, inject the retriever.
+            if hasattr(self._vision_analyst, "_retriever") and getattr(self._vision_analyst, "_retriever") is None:
+                setattr(self._vision_analyst, "_retriever", self._vector_store)
             vision_tool = PosterAnalysisTool(vision_tool=self._vision_analyst)
             tools.append(vision_tool)
 
         # Create prompt with tool names
         prompt = MOVIE_REACT_PROMPT.partial(tool_names=[t.name for t in tools])
         
-        self._agent = MovieReactAgent(
+        self._agent = ToolCallingAgent(
             llm=self.config.llm,
             tools=tools,
             prompt=prompt,
@@ -82,7 +85,7 @@ class MovieAgentService:
             answer=result["answer"],
             movies=result["movies"],
             latency_ms=latency_ms,
-            reasoning_type="react",
+            reasoning_type="tool_calling",
         )
 
 

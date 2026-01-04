@@ -64,8 +64,8 @@ service = EvalMovieAgentService(config)
 retriever = create_retriever(config=config)
 service.set_vector_store(retriever)
 
-# Vision tool - using factory function
-vision_tool = create_vision_tool(config)
+# Vision tool - using factory function (inject retriever for title inference)
+vision_tool = create_vision_tool(config, retriever=retriever)
 service.set_vision_analyst(vision_tool)
 
 # Step 4 — Inject LLM using factory

@@ -5,7 +5,10 @@ from .tools.blip_vision_tool import BLIPVisionTool
 from .config import MovieAgentConfig
 
 
-def create_vision_tool(config: Optional[MovieAgentConfig] = None) -> BLIPVisionTool:
+def create_vision_tool(
+    config: Optional[MovieAgentConfig] = None,
+    retriever: Optional[object] = None,
+) -> BLIPVisionTool:
     """
     Factory function to create a configured BLIPVisionTool instance.
     
@@ -24,5 +27,6 @@ def create_vision_tool(config: Optional[MovieAgentConfig] = None) -> BLIPVisionT
     
     return BLIPVisionTool(
         model_name=model_name,
-        model_path=model_path
+        model_path=model_path,
+        retriever=retriever,
     )
