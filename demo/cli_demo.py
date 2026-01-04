@@ -10,18 +10,18 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Add src to path
+# Add src to path (when PYTHONPATH=src, imports should be from movie_agent, not src.movie_agent)
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from src.movie_agent.llm_factory import get_llm_instance
-from src.movie_agent.vision_factory import create_vision_tool
-from src.movie_agent.retriever_factory import create_retriever
-from src.movie_agent.config import MovieAgentConfig
-from src.movie_agent.vector_store import MovieVectorStore
-from src.movie_agent.data_loader import MovieDataLoader
-from src.movie_agent.canonicalizer import build_documents
-from src.movie_agent.chunking import MovieChunker
-from src.movie_agent.service import MovieAgentService
+from movie_agent.llm_factory import get_llm_instance
+from movie_agent.vision_factory import create_vision_tool
+from movie_agent.retriever_factory import create_retriever
+from movie_agent.config import MovieAgentConfig
+from movie_agent.vector_store import MovieVectorStore
+from movie_agent.data_loader import MovieDataLoader
+from movie_agent.canonicalizer import build_documents
+from movie_agent.chunking import MovieChunker
+from movie_agent.service import MovieAgentService
 
 # Load environment variables
 load_dotenv()
