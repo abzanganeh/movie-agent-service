@@ -1,6 +1,6 @@
 # Movie Agent Service
 
-An intelligent, agentic AI service for movie recommendations and discovery using RAG (Retrieval-Augmented Generation) and ReAct agent patterns.
+An intelligent, agentic AI service for movie recommendations and discovery using RAG (Retrieval-Augmented Generation) and tool-calling agent patterns.
 
 ## What It Does
 
@@ -33,21 +33,30 @@ export OPENAI_API_KEY="your-key-here"
 export GROQ_API_KEY="your-key-here"  # Optional
 ```
 
-### Running the Service
+### Running the Demo
+
+#### Interactive CLI Demo
 
 ```bash
-# Start the Flask server
-python src/app.py
-
-# Or run with development mode
-FLASK_ENV=development python src/app.py
+# Run the interactive CLI demo
+PYTHONPATH=src python demo/cli_demo.py
 ```
 
-The service will be available at `http://localhost:5000`
+The CLI demo provides an interactive loop where you can:
+- Ask movie questions (e.g., "Recommend sci-fi movies like Inception")
+- Analyze movie posters (e.g., "Analyze poster at path data/posters/test_poster01.png")
+- Generate quizzes, compare movies, search by actor/director/year
+- Type `quit` or `exit` to end the session
 
-### API Endpoints
+#### Evaluation Scripts
 
-See `local/CONTINUATION.md` for the complete public API specification.
+```bash
+# Run production evaluation with real LLM and tools
+PYTHONPATH=src python -m evaluation.run_real
+
+# Run dummy evaluation with mock tools (for testing)
+PYTHONPATH=src python -m evaluation.run
+```
 
 ## Architecture
 
@@ -117,9 +126,16 @@ movie-agent-service/
 │   ├── DESIGN_DECISIONS.md # WHY decisions were made
 │   ├── CONTINUATION.md   # LLM + human checkpoint
 │   └── ...               # Other internal docs
+├── demo/                  # Demo scripts
+│   └── cli_demo.py       # Interactive CLI demo
+├── evaluation/           # Evaluation scripts
+│   ├── run_real.py       # Production evaluation
+│   └── run.py            # Dummy evaluation
 └── src/                   # Source code
-    ├── app.py            # Flask application (thin UI layer)
-    └── ...               # Service implementation
+    └── movie_agent/      # Core service implementation
+        ├── agent/        # Agent orchestration
+        ├── tools/        # Tool implementations
+        └── ...           # Other modules
 ```
 
 ## Documentation
