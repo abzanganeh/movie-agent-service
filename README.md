@@ -2,6 +2,9 @@
 
 An intelligent, agentic AI service for movie recommendations and discovery using RAG (Retrieval-Augmented Generation) and tool-calling agent patterns.
 
+**Author:** Alireza Barzin Zanganeh  
+**Website:** [zanganehai.com](https://www.zanganehai.com/about)
+
 ## What It Does
 
 The Movie Agent Service provides a conversational interface for:
