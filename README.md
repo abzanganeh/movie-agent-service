@@ -194,5 +194,5 @@ This project is in active development. See `local/CONTINUATION.md` for current i
 
 ## License
 
-[Add your license here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
