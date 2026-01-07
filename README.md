@@ -48,6 +48,13 @@ app.initialize()
 response = app.chat("Find sci-fi movies like Inception")
 print(response.answer)
 
+# Similarity search automatically excludes the original movie
+response = app.chat("find more movies like this")  # After uploading a poster
+
+# Year-specific queries with automatic filtering
+response = app.chat("find action movies in 2013")
+response = app.chat("show me comedies from the 90s")
+
 poster_response = app.analyze_poster("path/to/poster.png")
 print(poster_response.title)
 ```
@@ -82,6 +89,7 @@ The codebase is structured with OOP principles:
 - Dependency Inversion: Dependencies are injected, not hardcoded
 - Factory Pattern: Tools and components are created via factories
 - Strategy Pattern: Different question generators for quiz types
+- Separation of Decision and Action: Classes either decide (e.g., SimilarityQueryAnalyzer) or act (e.g., MovieSearchTool), but not both, unless they are Agents
 
 ## Project Structure
 
