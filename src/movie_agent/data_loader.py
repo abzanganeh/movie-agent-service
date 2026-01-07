@@ -60,6 +60,30 @@ class MovieDataLoader:
             return None
 
     def _parse_list(self, value: Optional[str]) -> List[str]:
+        """
+        Parse a list from CSV value.
+        
+        Handles multiple formats:
+        - Comma-separated: "Name1, Name2, Name3"
+        - Pipe-separated: "Name1|Name2|Name3"
+        - Concatenated (no separators): "Name1Name2Name3" (splits on capital letters after lowercase)
+        """
         if not value:
             return []
-        return [v.strip() for v in re.split(r",|\|", value) if v.strip()]
+        
+        # First try standard separators (comma or pipe)
+        if "," in value or "|" in value:
+            return [v.strip() for v in re.split(r",|\|", value) if v.strip()]
+        
+        # Handle concatenated names (e.g., "John SmithJane Doe" -> ["John Smith", "Jane Doe"])
+        # Pattern: Split on capital letter that follows lowercase letter or digit
+        # This handles: "Cliff HollingsworthAkiva Goldsman" -> ["Cliff Hollingsworth", "Akiva Goldsman"]
+        parts = re.split(r'(?<=[a-z0-9])(?=[A-Z])', value)
+        # Filter out empty strings and strip whitespace
+        result = [v.strip() for v in parts if v.strip()]
+        
+        # If splitting didn't work (e.g., all caps or single name), return as single item
+        if not result:
+            return [value.strip()] if value.strip() else []
+        
+        return result

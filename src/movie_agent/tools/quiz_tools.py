@@ -1,15 +1,20 @@
 from typing import Any, List, Optional
 import json
+import logging
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
 from langchain_core.documents import Document
 
 from .retriever_tool import RetrieverTool
+from .question_generators import QuestionGeneratorFactory
+
+logger = logging.getLogger(__name__)
 
 
 class GenerateQuizArgs(BaseModel):
     topic: str = Field(description="Topic for the quiz (e.g., 'movies' or a specific movie title)")
-    num_questions: int = Field(default=1, ge=1, le=5, description="Number of quiz questions to generate (1-5)")
+    num_questions: int = Field(default=10, ge=1, le=10, description="Number of quiz questions to generate (1-10, default 10)")
+    quiz_type: str = Field(default="year", description="Type of quiz: 'year', 'director', or 'cast'")
 
 
 class GenerateMovieQuizTool(BaseTool):
@@ -21,7 +26,9 @@ class GenerateMovieQuizTool(BaseTool):
     name: str = "generate_movie_quiz"
     description: str = (
         "Generates movie quiz questions. Use when user wants to play a quiz or trivia game. "
-        "Parameters: topic (string), num_questions (integer 1-5, default 3)."
+        "Parameters: topic (string), num_questions (integer 1-10, default 10), quiz_type (string: 'year', 'director', or 'cast', default 'year'). "
+        "Generate 10 questions per quiz session by default. Questions will be shown one at a time with feedback after each answer. "
+        "Quiz types: 'year' (release year), 'director' (who directed), 'cast' (who starred in)."
     )
     retriever: Any = Field(default=None)
     top_k: int = Field(default=5)
@@ -33,73 +40,101 @@ class GenerateMovieQuizTool(BaseTool):
         self.retriever = retriever
         self.top_k = int(top_k)
 
-    def _run(self, topic: str, num_questions: int = 1, exclude_question_ids: Optional[List[int]] = None) -> str:
+    def _run(self, topic: str, num_questions: int = 1, quiz_type: str = "year", exclude_question_ids: Optional[List[int]] = None) -> str:
         """
-        Generate quiz questions, optionally excluding previously asked questions.
+        Generate quiz questions using Strategy Pattern (OOP).
+        
+        Uses QuestionGeneratorFactory to select appropriate generator based on quiz_type.
+        Supports: 'year', 'director', 'cast'
         
         :param topic: Topic for the quiz
         :param num_questions: Number of questions to generate
+        :param quiz_type: Type of quiz ('year', 'director', 'cast')
         :param exclude_question_ids: Optional list of question IDs to exclude
         :return: JSON string with quiz data
         """
+        import random
+        
         exclude_question_ids = exclude_question_ids or []
-        # Retrieve more docs to have options after filtering
-        docs: List[Document] = self.retriever.retrieve(topic, k=min(self.top_k * 2, num_questions * 3))
+        
+        # OOP: Strategy Pattern - get appropriate generator
+        generator = QuestionGeneratorFactory.create(quiz_type)
+        
+        # Retrieve more docs to have options for distractors and randomization
+        retrieve_count = min(self.top_k * 3, num_questions * 5)
+        docs: List[Document] = self.retriever.retrieve(topic, k=retrieve_count)
         if not docs:
             return json.dumps(
-                {"topic": topic, "questions": [], "note": "No quiz data available."}
+                {"topic": topic, "questions": [], "quiz_type": quiz_type, "note": "No quiz data available."}
             )
+
+        # Randomize document order to get different questions each time
+        docs_shuffled = list(docs)
+        random.shuffle(docs_shuffled)
 
         questions = []
         question_id = 1
+        skipped_count = 0
+        max_skips = retrieve_count  # Don't skip more than total docs retrieved
         
-        for doc in docs:
+        for doc in docs_shuffled:
             if len(questions) >= num_questions:
                 break
-                
-            meta = getattr(doc, "metadata", {}) or {}
-            title = meta.get("title", "Unknown Title")
-            year = meta.get("year", "Unknown Year")
-            correct = str(year)
 
-            # Skip if this question was already asked (based on title)
-            # Note: We use title as identifier since we don't have persistent question IDs
-            # In a real system, you'd track by a stable question ID
+            # Skip if this question was already asked
             if exclude_question_ids and question_id in exclude_question_ids:
                 question_id += 1
                 continue
 
-            distractors: List[str] = []
-            try:
-                y = int(year)
-                distractors = [str(y - 1), str(y + 1), str(y + 2)]
-            except Exception:
-                distractors = ["1999", "2005", "2010"]
-
-            # Deduplicate while preserving order, limit to 3 options
-            options = []
-            for opt in [correct] + distractors:
-                if opt not in options:
-                    options.append(opt)
-                if len(options) == 3:
+            # OOP: Delegate question generation to appropriate generator
+            question = generator.generate_question(doc, question_id, docs_shuffled)
+            
+            if question:
+                questions.append(question)
+                question_id += 1
+            else:
+                skipped_count += 1
+                # If we've skipped too many, break to avoid infinite loop
+                if skipped_count >= max_skips:
+                    logger.warning(f"CastQuestionGenerator: Skipped {skipped_count} documents without cast data. Only found {len(questions)} questions.")
                     break
 
-            # Escape quotes in title to prevent JSON issues
-            safe_title = title.replace('"', '\\"').replace("'", "\\'")
-            questions.append(
-                {
-                    "id": question_id,
-                    "question": f"What year was \"{safe_title}\" released?",
-                    "options": options,
-                    "answer": correct,
-                }
-            )
-            question_id += 1
+        # If no questions generated, return helpful error based on quiz type
+        if not questions:
+            if quiz_type == "cast":
+                return json.dumps({
+                    "topic": topic,
+                    "quiz_type": quiz_type,
+                    "questions": [],
+                    "error": "No cast/actor data available in the movie database. Please try 'year' or 'director' quiz types instead.",
+                    "note": "Cast quiz requires actor/cast information in movie metadata, which may not be available for all movies."
+                })
+            elif quiz_type == "director":
+                return json.dumps({
+                    "topic": topic,
+                    "quiz_type": quiz_type,
+                    "questions": [],
+                    "error": "No director data available in the movie database. Please try 'year' quiz type instead.",
+                    "note": "Director quiz requires director information in movie metadata, which may not be available for all movies."
+                })
+            else:
+                # Year quiz should always work, but handle edge case
+                return json.dumps({
+                    "topic": topic,
+                    "quiz_type": quiz_type,
+                    "questions": [],
+                    "error": "No quiz questions could be generated. Please try again or specify a different topic.",
+                    "note": "Unable to generate questions from available movie data."
+                })
+        
+        return json.dumps({
+            "topic": topic,
+            "quiz_type": quiz_type,
+            "questions": questions
+        })
 
-        return json.dumps({"topic": topic, "questions": questions})
-
-    async def _arun(self, topic: str, num_questions: int = 3) -> str:
-        return self._run(topic, num_questions=num_questions)
+    async def _arun(self, topic: str, num_questions: int = 10, quiz_type: str = "year") -> str:
+        return self._run(topic, num_questions=num_questions, quiz_type=quiz_type)
 
 
 class CheckQuizAnswerArgs(BaseModel):
@@ -155,7 +190,8 @@ class CompareMoviesTool(BaseTool):
 
     name: str = "compare_movies"
     description: str = (
-        "Compare two movies on basic metadata (year, genres, director) using the retriever."
+        "Compare two movies on metadata including year, genres, director, and IMDb rating. "
+        "Always include ratings in the comparison to help users understand which movie is better rated."
     )
     retriever: Any = Field(default=None)
     top_k: int = Field(default=3)
@@ -173,19 +209,24 @@ class CompareMoviesTool(BaseTool):
 
         def meta_summary(doc: Optional[Document]) -> dict:
             if not doc:
-                return {"title": "Unknown", "year": "Unknown", "genres": [], "director": "Unknown"}
+                return {"title": "Unknown", "year": "Unknown", "genres": [], "director": "Unknown", "rating": None}
             meta = getattr(doc, "metadata", {}) or {}
             return {
                 "title": meta.get("title", "Unknown"),
                 "year": meta.get("year", "Unknown"),
                 "genres": meta.get("genres", meta.get("genre", [])),
                 "director": meta.get("director", "Unknown"),
+                "rating": meta.get("rating", None),  # IMDb rating
             }
 
         a_meta = meta_summary(a_doc)
         b_meta = meta_summary(b_doc)
 
-        aspects = aspects or ["title", "year", "genres", "director"]
+        # Always include rating in comparison (OOP: Encapsulation - rating is part of movie comparison)
+        aspects = aspects or ["title", "year", "genres", "director", "rating"]
+        # Ensure rating is always included even if not in aspects list
+        if "rating" not in aspects:
+            aspects.append("rating")
         comparison = {aspect: {"a": a_meta.get(aspect), "b": b_meta.get(aspect)} for aspect in aspects}
 
         return json.dumps(

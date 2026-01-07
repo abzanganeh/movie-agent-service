@@ -6,6 +6,7 @@ from langchain.tools import BaseTool
 from .output_parser import AgentOutputParser
 from .prompts import MOVIE_PROMPT
 from .callbacks import ToolLatencyCallback
+from .output_formatter import ToolOutputFormatterFactory
 
 
 class ToolCallingAgent:
@@ -126,22 +127,11 @@ class ToolCallingAgent:
                                 except Exception:
                                     pass
                     
-                    # Parse check_quiz_answer output: JSON with feedback
-                    elif tool_name == 'check_quiz_answer':
-                        try:
-                            check_result = json.loads(tool_output)
-                            # Format the feedback nicely
-                            is_correct = check_result.get("is_correct", False)
-                            correct_answer = check_result.get("correct_answer", "")
-                            if is_correct:
-                                formatted_feedback = f"Correct! Great job! The answer was {correct_answer}."
-                            else:
-                                formatted_feedback = f"Incorrect. The correct answer was {correct_answer}. Let's try the next one!"
-                            # Replace JSON with formatted message
-                            tool_outputs[-1] = formatted_feedback
-                        except (json.JSONDecodeError, Exception):
-                            # If parsing fails, keep original output
-                            pass
+                    # OOP: Delegation - use formatter factory to format tool outputs
+                    # This separates formatting concerns from agent execution logic
+                    formatted_output = ToolOutputFormatterFactory.format_output(tool_name, tool_output)
+                    if formatted_output != tool_output:
+                        tool_outputs[-1] = formatted_output
         
         # Format answer from tool output
         if tool_outputs:

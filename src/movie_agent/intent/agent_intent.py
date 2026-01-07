@@ -24,6 +24,7 @@ class AgentIntent(str, Enum):
     ACTOR_LOOKUP = "actor_lookup"
     DIRECTOR_LOOKUP = "director_lookup"
     YEAR_LOOKUP = "year_lookup"
+    RATING_LOOKUP = "rating_lookup"
     POSTER_QUERY = "poster_query"
     CORRECTION = "correction"
     CHIT_CHAT = "chit_chat"
@@ -44,6 +45,7 @@ class AgentIntent(str, Enum):
             cls.ACTOR_LOOKUP: "search_actor",
             cls.DIRECTOR_LOOKUP: "search_director",
             cls.YEAR_LOOKUP: "search_year",
+            cls.RATING_LOOKUP: "get_movie_statistics",
             cls.POSTER_QUERY: "movie_search",  # Uses movie_search after vision
             cls.CORRECTION: None,  # No tool
             cls.CHIT_CHAT: None,  # No tool
@@ -85,10 +87,20 @@ def detect_intent(user_input: str, quiz_active: bool = False) -> AgentIntent:
     
     # Quiz-related intents (state-aware) - CHECK FIRST when quiz is active
     if quiz_active:
-        # Navigation phrases - advance to next question
+        # Stop quiz phrases - check first
+        stop_patterns = [
+            r'\b(no|nope|stop|quit|end|exit|done|finish|enough|finish game|quit game|end game|stop game)\b',
+            r'^(no|n|stop|quit|end|exit|done|finish|enough)$',
+            r'\b(finish|end|stop|quit|exit)\s+(game|quiz|trivia)\b',
+        ]
+        if any(re.search(pattern, text, re.IGNORECASE) for pattern in stop_patterns):
+            return AgentIntent.QUIZ_NEXT  # Treat as navigation to exit quiz
+        
+        # Navigation phrases - advance to next question or continue
         next_patterns = [
-            r'\b(next|next one|next question|continue|skip|move on|proceed|go to next)\b',
-            r'^(next|continue|skip)$',
+            r'\b(next|next one|next question|continue|skip|move on|proceed|go to next|yes|yep|yeah|sure|ok|okay)\b',
+            r'^(next|continue|skip|yes|y|ok|okay)$',
+            r'^$',  # Empty string (Enter key)
         ]
         if any(re.search(pattern, text) for pattern in next_patterns):
             return AgentIntent.QUIZ_NEXT  # User wants next question
@@ -97,16 +109,45 @@ def detect_intent(user_input: str, quiz_active: bool = False) -> AgentIntent:
         if re.search(r'\b(play|quiz|trivia|game|start game|new quiz|another quiz)\b', text):
             return AgentIntent.QUIZ_START  # User wants to start a new quiz
         
-        # When quiz is active, ANY input that's not navigation/start is an answer
-        # This includes years, numbers, or any text - prioritize quiz answer
+        # CRITICAL: Check for explicit exit intents BEFORE defaulting to quiz answer
+        # If user is clearly trying to do something else, allow them to exit quiz mode
+        # Check movie search patterns (e.g., "show me", "find", "search", "movies from", "action movies")
+        if re.search(r'\b(show me|find|search|look for|recommend|suggest|movies? from|action movies?|comedy movies?|movies? in|movies? of)\b', text, re.IGNORECASE):
+            return AgentIntent.MOVIE_SEARCH  # User wants to search, exit quiz
+        
+        # Check comparison patterns
+        if re.search(r'\b(compare|vs|versus|better than|difference between|which is better|prefer)\b', text):
+            return AgentIntent.MOVIE_COMPARISON  # User wants to compare, exit quiz
+        
+        # Check actor/director/year lookup patterns
+        if re.search(r'\b(actor|cast|who stars? in|starring|played by)\b', text):
+            return AgentIntent.ACTOR_LOOKUP  # User wants actor lookup, exit quiz
+        
+        if re.search(r'\b(director|who directed|directed by|helmed by)\b', text):
+            return AgentIntent.DIRECTOR_LOOKUP  # User wants director lookup, exit quiz
+        
+        if re.search(r'\b(year|from|released in|movies? (from|in) (19|20)\d{2})\b', text):
+            return AgentIntent.YEAR_LOOKUP  # User wants year lookup, exit quiz
+        
+        # Check rating lookup patterns
+        if re.search(r'\b(rating|rated|highest rated|lowest rated|best rated|worst rated|top rated|imdb rating|score|stars?)\b', text, re.IGNORECASE):
+            return AgentIntent.RATING_LOOKUP  # User wants rating lookup, exit quiz
+        
+        # Check for correction/feedback (user might be correcting quiz behavior)
+        if re.search(r'\b(wrong|incorrect|no|that\'?s not|not right|fix|correction|mistake|error|actually|belongs to|some of these)\b', text):
+            return AgentIntent.CORRECTION  # User is providing feedback, exit quiz
+        
+        # When quiz is active, if none of the above matched, treat as quiz answer
+        # This includes years, numbers, or any text that doesn't match exit patterns
         return AgentIntent.QUIZ_ANSWER  # User is answering current quiz
     
     # Start quiz (only when not in quiz mode)
-    # Match "play", "quiz", "trivia", "game", "let's play", "lets play", etc.
+    # Match "play", "quiz", "trivia", "game", "let's play", "lets play", "yes" (after quiz completion), etc.
     quiz_patterns = [
         r'\b(play|quiz|trivia|game|shoot|start game)\b',
         r"let'?s\s+play",
         r"lets\s+play",
+        r'^(yes|y|yeah|yep|sure|ok|okay)$',  # "yes" after quiz completion should start new quiz
     ]
     if any(re.search(pattern, text) for pattern in quiz_patterns):
         return AgentIntent.QUIZ_START
@@ -127,13 +168,17 @@ def detect_intent(user_input: str, quiz_active: bool = False) -> AgentIntent:
     if re.search(r'\b(year|from|released in|movies? (from|in) (19|20)\d{2})\b', text):
         return AgentIntent.YEAR_LOOKUP
     
+    # Movie comparison - check BEFORE rating lookup to catch "compare rating" queries
+    if re.search(r'\b(compare|vs|versus|better than|difference between|which is better|prefer)\b', text):
+        return AgentIntent.MOVIE_COMPARISON
+    
+    # Rating lookup - check AFTER comparison to avoid conflicts
+    if re.search(r'\b(rating|rated|highest rated|lowest rated|best rated|worst rated|top rated|imdb rating|score|stars?)\b', text, re.IGNORECASE):
+        return AgentIntent.RATING_LOOKUP
+    
     # Correction/feedback
     if re.search(r'\b(wrong|incorrect|no|that\'?s not|not right|fix|correction|mistake|error|actually|belongs to|some of these)\b', text):
         return AgentIntent.CORRECTION
-    
-    # Movie comparison
-    if re.search(r'\b(compare|vs|versus|better than|difference between|which is better|prefer)\b', text):
-        return AgentIntent.MOVIE_COMPARISON
     
     # Movie search (fallback for movie-related queries)
     movie_keywords = ['movie', 'movies', 'film', 'films', 'show', 'recommend', 'find', 'search', 'suggest', 'watch']
