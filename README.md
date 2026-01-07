@@ -9,6 +9,72 @@ An intelligent agentic AI service for movie recommendations and discovery using 
 
 This service provides a conversational interface for discovering movies, getting recommendations, analyzing posters, and answering questions about films, actors, directors, and genres.
 
+## Architecture & Design Philosophy
+
+This service is designed to work with a **tool-calling agent** architecture, not ReAct. Here's why this choice matters:
+
+### Our Architecture Flow
+
+```
+User
+ ↓
+Service (rules + state management)
+ ↓
+Agent (LLM reasoning with tool selection)
+ ↓
+Tools (execution)
+ ↓
+Service (state update + validation)
+ ↓
+Response
+```
+
+Instead of the simpler but more fragile:
+```
+User → LLM → Tool → Response
+```
+
+### Why Tool-Calling Agent Instead of ReAct?
+
+We chose tool-calling agent architecture over ReAct for production-grade reliability and maintainability:
+
+| Dimension | Tool-Calling Agent (Our Design) | ReAct Agent |
+|-----------|--------------------------------|-------------|
+| **Agent type** | Tool-calling agent | ReAct agent |
+| **Reasoning visibility** | Hidden (clean responses) | Explicit (reasoning leaks) |
+| **Tool invocation** | API-managed | Text-managed |
+| **Production readiness** | High | Low |
+| **Prompt length** | Moderate | Very long |
+| **Fragility** | Low | High |
+| **Token efficiency** | Efficient | Expensive |
+| **Hallucination risk** | Lower | Higher |
+| **Maintainability** | Good | Poor |
+| **UI / API integration** | Clean | Messy |
+| **Best use case** | Real product | Learning / demo |
+
+**Key advantages for this project:**
+
+- **Service controls rules and state**: Business logic lives in code, not prompts
+- **Predictable behavior**: Clear tool mapping and explicit constraints
+- **Clean final answers**: No reasoning leaks to users
+- **Easier debugging**: State transitions and validation are explicit
+- **Better maintainability**: Rules can evolve in code, not embedded in prompts
+
+**What we intentionally sacrifice:** Introspectability (seeing the LLM's reasoning). In production, correctness and constraints matter more than verbose reasoning.
+
+### OOP Principles Applied
+
+The codebase is built with strong Object-Oriented Programming principles:
+
+- **Single Responsibility Principle**: Each class has one clear purpose (e.g., `QuizController` manages quiz state, `SimilarityQueryAnalyzer` decides exclusions)
+- **Separation of Decision and Action**: Classes either decide (e.g., `SimilarityQueryAnalyzer`) or act (e.g., `MovieSearchTool`), but not both—unless they are Agents
+- **Dependency Inversion**: Dependencies are injected, not hardcoded
+- **Encapsulation**: Internal logic and state are properly encapsulated
+- **Factory Pattern**: Tools and components are created via factories
+- **Strategy Pattern**: Different question generators for quiz types
+
+This OOP approach ensures the codebase is maintainable, testable, and follows clean architecture principles.
+
 ## Quick Start
 
 ### Prerequisites
