@@ -21,6 +21,8 @@ class MovieSearchTool(BaseTool):
     description: str = (
         "Use this tool to find, search, or discover movies by description, genre, year, title, or attributes. "
         "Use for: 'find comedies', 'show me action movies', 'recommend sci-fi', 'movies from 90s', etc. "
+        "IMPORTANT: When user asks for similar movies (e.g., 'find more movies like this'), prioritize GENRE/MOOD matching, "
+        "not just title similarity. Use genre-based queries like 'comedy family movies' instead of just the movie title. "
         "Input should be a natural language query describing what movies to find."
     )
     # Pydantic v2 requires declared fields for assignment
@@ -35,14 +37,85 @@ class MovieSearchTool(BaseTool):
     args_schema: type[BaseModel] = MovieSearchArgs
 
     def _run(self, query: str) -> str:
-        results: List[Document] = self.retriever.retrieve(query, k=self.top_k)
-        if not results:
+        """
+        Run movie search and filter results.
+        
+        OOP: Single Responsibility - executes search and filters results.
+        
+        If query contains "like [title]" pattern, excludes that title from results.
+        """
+        results: List[Document] = self.retriever.retrieve(query, k=self.top_k * 2)
+        
+        # Filter out original movie if query contains "like [title]" pattern
+        # This handles similarity searches where user wants movies "like Home Alone"
+        filtered_results = self._filter_similarity_results(results, query)
+        
+        # Limit to top_k after filtering
+        filtered_results = filtered_results[:self.top_k]
+        
+        if not filtered_results:
             return "No movies found matching the query."
+        
         summaries = [
             f"{doc.metadata.get('title', 'Unknown')} ({doc.metadata.get('year', 'N/A')})"
-            for doc in results
+            for doc in filtered_results
         ]
         return "; ".join(summaries)
+    
+    def _filter_similarity_results(self, results: List[Document], query: str) -> List[Document]:
+        """
+        Filter out the original movie from similarity search results.
+        
+        OOP: Single Responsibility - filters results based on query patterns.
+        
+        Detects "like [title]" pattern in query and excludes that title.
+        
+        :param results: List of Document objects from search
+        :param query: Search query string
+        :return: Filtered list of documents
+        """
+        import re
+        
+        # Detect "like [title]" pattern in query
+        # Examples: "like Home Alone", "similar to Home Alone", "movies like Home Alone"
+        like_patterns = [
+            r"like\s+(.+?)(?:\s|$|movies|movie)",
+            r"similar to\s+(.+?)(?:\s|$|movies|movie)",
+            r"more like\s+(.+?)(?:\s|$|movies|movie)",
+        ]
+        
+        exclude_title = None
+        query_lower = query.lower()
+        
+        for pattern in like_patterns:
+            match = re.search(pattern, query_lower, re.IGNORECASE)
+            if match:
+                exclude_title = match.group(1).strip()
+                break
+        
+        # If no pattern found, check if query ends with a title (common in similarity queries)
+        # This handles queries like "comedy family movies like Home Alone"
+        if not exclude_title:
+            # Try to extract title from end of query after "like"
+            end_pattern = r"like\s+(.+)$"
+            match = re.search(end_pattern, query_lower, re.IGNORECASE)
+            if match:
+                exclude_title = match.group(1).strip()
+        
+        # Filter out the excluded title (case-insensitive comparison)
+        if exclude_title:
+            filtered = []
+            exclude_lower = exclude_title.lower()
+            for doc in results:
+                doc_title = doc.metadata.get('title', '')
+                if doc_title and doc_title.lower() != exclude_lower:
+                    filtered.append(doc)
+            
+            # If filtering removed all results, return original results (edge case)
+            if filtered:
+                return filtered
+        
+        return results
     
     def get_last_resolution_metadata(self):
         """Get resolution metadata from the last retrieve() call."""
