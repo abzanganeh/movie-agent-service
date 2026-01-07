@@ -139,17 +139,20 @@ class QuizState:
         # Normalize user answer
         user_answer = str(user_answer).strip().lower()
         
+        # Normalize correct answer for comparison
+        correct_answer_normalized = str(correct_answer).strip().lower()
+        
         # Check if user answered with option number (1, 2, 3)
         try:
             option_num = int(user_answer)
             if 1 <= option_num <= len(options):
                 selected_option = str(options[option_num - 1]).strip().lower()
-                is_correct = selected_option == correct_answer.lower()
+                is_correct = selected_option == correct_answer_normalized
             else:
                 is_correct = False
         except ValueError:
-            # Check if user answered with option text or year
-            is_correct = user_answer == correct_answer.lower()
+            # Check if user answered with option text or year (both normalized)
+            is_correct = user_answer == correct_answer_normalized
         
         correct_answer_text = correct_answer
         
@@ -188,4 +191,29 @@ class QuizState:
         if not self.active:
             return False
         return self.current_question_index >= self.get_total_questions()
+    
+    def get_asked_question_ids(self) -> List[int]:
+        """
+        Get list of question IDs that have been asked.
+        
+        :return: List of question IDs from history
+        """
+        return [item.get("question_id") for item in self.history if item.get("question_id") is not None]
+    
+    def has_been_asked(self, question_id: int) -> bool:
+        """
+        Check if a question has already been asked.
+        
+        :param question_id: Question ID to check
+        :return: True if question has been asked, False otherwise
+        """
+        return question_id in self.get_asked_question_ids()
+    
+    def get_asked_questions(self) -> List[Dict[str, Any]]:
+        """
+        Get list of all questions that have been asked.
+        
+        :return: List of question dictionaries from history
+        """
+        return self.history.copy()
 

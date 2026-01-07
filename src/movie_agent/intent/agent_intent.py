@@ -83,7 +83,7 @@ def detect_intent(user_input: str, quiz_active: bool = False) -> AgentIntent:
     """
     text = user_input.lower().strip()
     
-    # Quiz-related intents (state-aware)
+    # Quiz-related intents (state-aware) - CHECK FIRST when quiz is active
     if quiz_active:
         # Navigation phrases - advance to next question
         next_patterns = [
@@ -96,6 +96,9 @@ def detect_intent(user_input: str, quiz_active: bool = False) -> AgentIntent:
         # Exception: explicit quiz start request
         if re.search(r'\b(play|quiz|trivia|game|start game|new quiz|another quiz)\b', text):
             return AgentIntent.QUIZ_START  # User wants to start a new quiz
+        
+        # When quiz is active, ANY input that's not navigation/start is an answer
+        # This includes years, numbers, or any text - prioritize quiz answer
         return AgentIntent.QUIZ_ANSWER  # User is answering current quiz
     
     # Start quiz (only when not in quiz mode)

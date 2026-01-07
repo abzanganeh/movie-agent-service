@@ -33,19 +33,41 @@ class GenerateMovieQuizTool(BaseTool):
         self.retriever = retriever
         self.top_k = int(top_k)
 
-    def _run(self, topic: str, num_questions: int = 1) -> str:
-        docs: List[Document] = self.retriever.retrieve(topic, k=min(self.top_k, num_questions))
+    def _run(self, topic: str, num_questions: int = 1, exclude_question_ids: Optional[List[int]] = None) -> str:
+        """
+        Generate quiz questions, optionally excluding previously asked questions.
+        
+        :param topic: Topic for the quiz
+        :param num_questions: Number of questions to generate
+        :param exclude_question_ids: Optional list of question IDs to exclude
+        :return: JSON string with quiz data
+        """
+        exclude_question_ids = exclude_question_ids or []
+        # Retrieve more docs to have options after filtering
+        docs: List[Document] = self.retriever.retrieve(topic, k=min(self.top_k * 2, num_questions * 3))
         if not docs:
             return json.dumps(
                 {"topic": topic, "questions": [], "note": "No quiz data available."}
             )
 
         questions = []
-        for i, doc in enumerate(docs[:num_questions]):
+        question_id = 1
+        
+        for doc in docs:
+            if len(questions) >= num_questions:
+                break
+                
             meta = getattr(doc, "metadata", {}) or {}
             title = meta.get("title", "Unknown Title")
             year = meta.get("year", "Unknown Year")
             correct = str(year)
+
+            # Skip if this question was already asked (based on title)
+            # Note: We use title as identifier since we don't have persistent question IDs
+            # In a real system, you'd track by a stable question ID
+            if exclude_question_ids and question_id in exclude_question_ids:
+                question_id += 1
+                continue
 
             distractors: List[str] = []
             try:
@@ -66,12 +88,13 @@ class GenerateMovieQuizTool(BaseTool):
             safe_title = title.replace('"', '\\"').replace("'", "\\'")
             questions.append(
                 {
-                    "id": i + 1,
+                    "id": question_id,
                     "question": f"What year was \"{safe_title}\" released?",
                     "options": options,
                     "answer": correct,
                 }
             )
+            question_id += 1
 
         return json.dumps({"topic": topic, "questions": questions})
 

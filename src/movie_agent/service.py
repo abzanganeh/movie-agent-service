@@ -28,6 +28,7 @@ from .memory import SessionMemoryManager
 from .memory.session_state import SessionStateManager
 from .memory.quiz_state import QuizState
 from .intent import AgentIntent, detect_intent
+from .quiz_controller import QuizController
 from .context import SessionContextManager
 from .orchestration.poster_orchestrator import PosterOrchestrator
 from .orchestration.chat_orchestrator import ChatOrchestrator
@@ -143,14 +144,180 @@ class MovieAgentService:
         session_state = self._session_state.get_state(session_id)
         quiz_state = session_state.get_quiz_state()
         
-        intent = detect_intent(user_message, quiz_active=quiz_state.is_active())
+        # CRITICAL: Process any pending quiz activation FIRST (from previous request)
+        # This ensures quiz state is active before intent detection
+        # Check if there's a pending quiz activation in session state
+        # (This handles the case where generate_movie_quiz was called in previous request)
+        
+        # Check quiz state BEFORE intent detection to ensure accurate intent routing
+        quiz_active = quiz_state.is_active()
+        
+        # Debug: Log quiz state for troubleshooting
+        if quiz_active:
+            logger.info(f"✅ Quiz is ACTIVE for session {session_id[:8]}, question index: {quiz_state.current_question_index}, score: {quiz_state.score}/{quiz_state.get_total_questions()}")
+        else:
+            logger.warning(f"❌ Quiz is NOT active for session {session_id[:8]}. Quiz data exists: {bool(quiz_state.quiz_data)}, active flag: {quiz_state.active}")
+        
+        intent = detect_intent(user_message, quiz_active=quiz_active)
+        
+        # CRITICAL FIX: If quiz is active, ANY input that's not explicit navigation/start is a quiz answer
+        # This overrides intent detection to ensure quiz answers are always handled correctly
+        original_intent = intent
+        if quiz_active and intent != AgentIntent.QUIZ_NEXT and intent != AgentIntent.QUIZ_START:
+            intent = AgentIntent.QUIZ_ANSWER
+            logger.info(f"🔄 Overriding intent to QUIZ_ANSWER (quiz is active, original intent was {original_intent.value})")
+        
+        # Create quiz controller for managing quiz state (OOP: Single Responsibility)
+        quiz_controller = QuizController(quiz_state)
+        
+        # Handle QUIZ_ANSWER intent - controller manages quiz progression (NO LLM INVOLVEMENT)
+        # This is the critical fix: Controller owns quiz state, not the LLM
+        if intent == AgentIntent.QUIZ_ANSWER:
+            if not quiz_state.is_active():
+                # Quiz state not active - this shouldn't happen if quiz was properly activated
+                logger.warning(f"⚠️ QUIZ_ANSWER intent detected but quiz is NOT active! User said: {user_message[:50]}")
+                # Try to recover by checking if quiz data exists but state is inactive
+                if quiz_state.quiz_data and quiz_state.quiz_data.get("questions"):
+                    logger.info("🔄 Attempting to reactivate quiz from existing quiz_data...")
+                    quiz_controller = QuizController(quiz_state)
+                    quiz_controller.activate_quiz(quiz_state.quiz_data)
+                    # Re-check after reactivation
+                    if quiz_state.is_active():
+                        logger.info("✅ Quiz reactivated successfully")
+                    else:
+                        logger.error("❌ Failed to reactivate quiz")
+                        # Return error response instead of continuing
+                        error_response = ChatResponse(
+                            answer="Quiz state error. Please start a new quiz with 'let's play'.",
+                            movies=[],
+                            tools_used=[],
+                            llm_latency_ms=0,
+                            tool_latency_ms=0,
+                            latency_ms=0,
+                            reasoning_type="error",
+                            confidence=0.0
+                        )
+                        return error_response
+                else:
+                    # No quiz data to recover from
+                    error_response = ChatResponse(
+                        answer="No quiz is currently active. Please start a new quiz with 'let's play'.",
+                        movies=[],
+                        tools_used=[],
+                        llm_latency_ms=0,
+                        tool_latency_ms=0,
+                        latency_ms=0,
+                        reasoning_type="error",
+                        confidence=0.0
+                    )
+                    return error_response
+            
+            if quiz_state.is_active():
+                # Controller validates answer and advances state directly
+                feedback, is_correct, correct_answer = quiz_controller.handle_answer(user_message)
+            
+                # Determine what to show next
+                if quiz_controller.is_complete():
+                    # Quiz complete - show final score and ask if they want to play again
+                    quiz_data = quiz_controller.get_completion_data()
+                    answer = f"{feedback}\n\n🎉 Quiz Complete!\n\nYour final score: {quiz_controller.score}/{quiz_controller.total_questions}\n\nWould you like to play again? (Type 'yes' or 'let's play')"
+                elif quiz_controller.is_active():
+                    # Get next question from controller
+                    current_q_data = quiz_controller.get_current_question_data()
+                    if current_q_data:
+                        quiz_data = current_q_data
+                        next_question = current_q_data["question"]
+                        options = ", ".join(current_q_data["options"])
+                        # Add "continue" prompt
+                        answer = f"{feedback}\n\n📝 Question {current_q_data['progress']['current']} of {current_q_data['progress']['total']}:\n{next_question}\nOptions: {options}"
+                    else:
+                        # Should not happen, but handle gracefully
+                        quiz_data = None
+                        answer = feedback
+                else:
+                    # Quiz was deactivated (should not happen after handle_answer)
+                    quiz_data = None
+                    answer = feedback
+                
+                # Build response (no LLM, no tools - controller handled everything)
+                response = ChatResponse(
+                    answer=answer,
+                    movies=[],
+                    tools_used=[],
+                    llm_latency_ms=0,
+                    tool_latency_ms=0,
+                    latency_ms=0,
+                    reasoning_type="quiz_answer_controller",
+                    confidence=1.0,
+                    quiz_data=quiz_data
+                )
+                
+                # Record in memory
+                if self._session_memory:
+                    self._session_memory.record(session_id, {
+                        "type": "assistant_response",
+                        "content": answer,
+                        "role": "assistant",
+                        "intent": intent.value,
+                    })
+                
+                logger.info(f"✅ Quiz answer handled by controller: correct={is_correct}, score={quiz_controller.score}/{quiz_controller.total_questions}")
+                return response
         
         # Handle QUIZ_NEXT intent - advance to next question without calling tools
         if intent == AgentIntent.QUIZ_NEXT and quiz_state.is_active():
             # Advance to next question if available
             if not quiz_state.is_complete():
                 quiz_state.advance_to_next_question()
-            # Return response with next question (handled in quiz_data logic below)
+            
+            # Serve next question directly without calling agent
+            current_q = quiz_state.get_current_question()
+            if current_q:
+                quiz_data = {
+                    "quiz_active": True,
+                    "question_id": current_q.get("id"),
+                    "question": current_q.get("question"),
+                    "options": current_q.get("options", []),
+                    "progress": {
+                        "current": quiz_state.current_question_index + 1,
+                        "total": quiz_state.get_total_questions()
+                    },
+                    "topic": quiz_state.quiz_data.get("topic", "movies"),
+                    "mode": quiz_state.mode
+                }
+                answer = f"Question {quiz_data['progress']['current']} of {quiz_data['progress']['total']}"
+            else:
+                # Quiz complete
+                quiz_data = {
+                    "quiz_active": False,
+                    "quiz_complete": True,
+                    "score": quiz_state.score,
+                    "total": quiz_state.get_total_questions(),
+                    "topic": quiz_state.quiz_data.get("topic", "movies")
+                }
+                answer = f"Quiz Complete!\n\nYour score: {quiz_state.score}/{quiz_state.get_total_questions()}"
+            
+            response = ChatResponse(
+                answer=answer,
+                movies=[],
+                tools_used=[],
+                llm_latency_ms=0,
+                tool_latency_ms=0,
+                latency_ms=0,
+                reasoning_type="quiz_navigation",
+                confidence=1.0,
+                quiz_data=quiz_data
+            )
+            
+            if self._session_memory:
+                self._session_memory.record(session_id, {
+                    "type": "assistant_response",
+                    "content": answer,
+                    "role": "assistant",
+                    "intent": intent.value,
+                })
+            
+            return response
         
         if intent == AgentIntent.CHIT_CHAT:
             greeting_responses = {
@@ -188,27 +355,11 @@ class MovieAgentService:
         intent_context = ""
         if intent == AgentIntent.CORRECTION:
             intent_context = "\n[IMPORTANT: User is providing feedback/correction. Acknowledge the correction conversationally. Do NOT call any tools, especially NOT check_quiz_answer. Just acknowledge and ask how to help further.]"
-        elif intent == AgentIntent.QUIZ_NEXT:
-            # User wants next question - serve it without calling any tools
-            intent_context = "\n[IMPORTANT: User wants to continue to the next quiz question. DO NOT call any tools. Just acknowledge and indicate the next question will be shown.]"
         elif intent == AgentIntent.QUIZ_ANSWER and not quiz_state.is_active():
+            # This should not happen since we handle QUIZ_ANSWER above, but keep for safety
             intent_context = "\n[IMPORTANT: User appears to be answering a quiz, but no quiz is active. Politely inform them that no quiz is currently running and ask if they'd like to start one.]"
-        elif intent == AgentIntent.QUIZ_ANSWER and quiz_state.is_active():
-            # Provide explicit quiz answer context with correct answer (for tool call only)
-            current_q = quiz_state.get_current_question()
-            if current_q:
-                # Get correct answer from quiz state (not exposed to user)
-                questions = quiz_state.quiz_data.get("questions", [])
-                if quiz_state.current_question_index < len(questions):
-                    correct_answer = questions[quiz_state.current_question_index].get("answer", "")
-                    intent_context = (
-                        f"\n[CRITICAL: User is answering the current quiz question. "
-                        f"You MUST call check_quiz_answer tool with these exact parameters:\n"
-                        f"- question: \"{current_q.get('question', '')}\"\n"
-                        f"- user_answer: \"{user_message}\"\n"
-                        f"- correct_answer: \"{correct_answer}\"\n"
-                        f"DO NOT expose the correct_answer to the user. DO NOT call any other tools. ONLY use check_quiz_answer.]"
-                    )
+        # REMOVED: QUIZ_ANSWER handling when quiz is active - this is now handled by controller above
+        # The LLM should NEVER control quiz progression - only the controller does
         
         session_context = self._session_context.get_context(session_id)
         
@@ -272,6 +423,16 @@ class MovieAgentService:
         original_answer = result.get("answer", "")
         original_movies = result.get("movies", [])
         
+        # Update session state FIRST (this may modify result["answer"] for check_quiz_answer)
+        self._update_session_state(session_state, result.get("tools_used", []), result)
+        
+        # Now get the updated answer (may contain feedback from check_quiz_answer)
+        updated_answer = result.get("answer", original_answer)
+        
+        # REMOVED: check_quiz_answer handling here
+        # Quiz answers are now handled by QuizController before this point
+        # The controller returns the response directly, so we never reach here for quiz answers
+        
         if result.get("tools_used"):
             validated_movies, validation_confidence = self._validate_movie_results(
                 validated_movies,
@@ -296,12 +457,19 @@ class MovieAgentService:
             if metadata:
                 resolution_metadata = metadata.to_dict()
         
-        self._update_session_state(session_state, result.get("tools_used", []), result)
-        
-        # Handle quiz state - serve one question at a time
+        # Handle quiz state BEFORE updating session state (to get current question before advancement)
         quiz_state = session_state.get_quiz_state()
         quiz_data = None
+        was_check_quiz_answer = "check_quiz_answer" in result.get("tools_used", [])
         
+        # If answer was checked, capture current question BEFORE state update advances it
+        current_question_before_advance = None
+        if was_check_quiz_answer and quiz_state.is_active():
+            current_question_before_advance = quiz_state.get_current_question()
+        
+        # _update_session_state was already called above to ensure feedback is available
+        
+        # Handle quiz state - serve one question at a time
         if quiz_state.is_active():
             # If quiz was just generated, serve first question
             if "generate_movie_quiz" in result.get("tools_used", []):
@@ -321,14 +489,42 @@ class MovieAgentService:
                     }
                     # Update answer to be quiz-friendly
                     validated_answer = f"Quiz: {quiz_state.quiz_data.get('topic', 'movies')}\n\nQuestion {quiz_data['progress']['current']} of {quiz_data['progress']['total']}"
-            # If answer was checked, show feedback first (don't advance immediately)
-            elif "check_quiz_answer" in result.get("tools_used", []):
-                # Keep the feedback in the answer, but don't show next question yet
-                # The feedback will be shown, and user can ask for next question or it auto-advances
-                # For now, just show feedback - next question will come on next interaction
+            # If answer was checked, show feedback and auto-advance to next question
+            elif was_check_quiz_answer:
+                # Get feedback from result (set by _update_session_state)
+                feedback_answer = result.get("answer", "")
+                if feedback_answer:
+                    validated_answer = feedback_answer
+                    logger.debug(f"Set validated_answer from check_quiz_answer feedback: {feedback_answer[:50]}...")
+                else:
+                    logger.warning("check_quiz_answer was used but no feedback found in result['answer']")
+                
+                # After showing feedback, automatically serve next question
+                # State was already advanced in _update_session_state, so get_current_question() returns next question
                 if quiz_state.is_active() and not quiz_state.is_complete():
-                    # Show feedback, next question will be served on next message
-                    quiz_data = None  # Don't show next question yet, just feedback
+                    # Auto-advance: serve next question immediately (already advanced in _update_session_state)
+                    current_q = quiz_state.get_current_question()
+                    if current_q:
+                        # Combine feedback with next question
+                        next_question_text = f"{current_q.get('question')}\nOptions: {', '.join(current_q.get('options', []))}"
+                        validated_answer = f"{validated_answer}\n\n{next_question_text}"
+                        
+                        quiz_data = {
+                            "quiz_active": True,
+                            "question_id": current_q.get("id"),
+                            "question": current_q.get("question"),
+                            "options": current_q.get("options", []),
+                            "progress": {
+                                "current": quiz_state.current_question_index + 1,
+                                "total": quiz_state.get_total_questions()
+                            },
+                            "topic": quiz_state.quiz_data.get("topic", "movies"),
+                            "mode": quiz_state.mode
+                        }
+                        logger.debug(f"Auto-advancing to next question: {current_q.get('question')[:50]}...")
+                    else:
+                        quiz_data = None
+                        logger.warning("Quiz is active but no current question found")
                 elif quiz_state.is_complete():
                     # Quiz complete - return final score
                     quiz_data = {
@@ -338,7 +534,8 @@ class MovieAgentService:
                         "total": quiz_state.get_total_questions(),
                         "topic": quiz_state.quiz_data.get("topic", "movies")
                     }
-                    validated_answer = f"Quiz Complete!\n\nYour score: {quiz_state.score}/{quiz_state.get_total_questions()}"
+                    validated_answer = f"{validated_answer}\n\nQuiz Complete!\n\nYour score: {quiz_state.score}/{quiz_state.get_total_questions()}"
+                    logger.debug(f"Quiz completed with score: {quiz_state.score}/{quiz_state.get_total_questions()}")
             # If quiz is active but no tool was used, serve current question
             elif quiz_state.is_active():
                 current_q = quiz_state.get_current_question()
@@ -698,49 +895,17 @@ class MovieAgentService:
                 quiz_data = self._extract_quiz_data_from_answer(answer)
             
             if quiz_data:
-                quiz_state.activate(quiz_data)
+                # Use controller to activate quiz (controller owns state management)
+                quiz_controller = QuizController(quiz_state)
+                quiz_controller.activate_quiz(quiz_data)
+                logger.info(f"✅ Quiz activated: {len(quiz_data.get('questions', []))} questions, session: {id(session_state)}")
             else:
                 quiz_state.activate({})
         
-        if "check_quiz_answer" in tools_used:
-            quiz_state.increment_attempts()
-            # Extract answer from result to check correctness
-            answer_text = result.get("answer", "")
-            # Try to extract user answer and check result from answer text
-            # Format: "Correct!" or "Incorrect. Try again."
-            # The check_quiz_answer tool returns JSON, but we need to parse it
-            json_match = re.search(r'\{.*"is_correct".*\}', answer_text, re.DOTALL)
-            if json_match:
-                try:
-                    check_result = json.loads(json_match.group())
-                    is_correct = check_result.get("is_correct", False)
-                    user_answer = check_result.get("user_answer", "")
-                    correct_answer = check_result.get("correct_answer", "")
-                    
-                    # Check answer using quiz state
-                    is_correct_state, correct_ans = quiz_state.check_answer(user_answer)
-                    if is_correct_state:
-                        quiz_state.increment_score()
-                    
-                    # Record in history
-                    quiz_state.record_answer(user_answer, is_correct_state)
-                    
-                    # Advance to next question
-                    has_more = quiz_state.advance_to_next_question()
-                    
-                    # Update answer with feedback
-                    if is_correct_state:
-                        feedback = f"Correct! The answer was {correct_ans}."
-                    else:
-                        feedback = f"Incorrect. The correct answer was {correct_ans}."
-                    
-                    if has_more:
-                        result["answer"] = f"{feedback}\n\nReady for the next question? Just send any message to continue."
-                    else:
-                        result["answer"] = f"{feedback}\n\nQuiz complete! Final score: {quiz_state.score}/{quiz_state.get_total_questions()}"
-                        quiz_state.deactivate()
-                except Exception as e:
-                    logger.warning(f"Failed to parse check_quiz_answer result: {e}", exc_info=True)
+        # REMOVED: check_quiz_answer handling from _update_session_state
+        # Quiz answers are now handled by QuizController in chat() method
+        # The controller owns quiz state progression - no LLM involvement
+        # This prevents the agent from making unreliable decisions about quiz progression
         
         if result.get("quiz_completed", False):
             quiz_state.deactivate()
