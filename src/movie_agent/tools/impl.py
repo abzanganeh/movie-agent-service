@@ -57,9 +57,21 @@ class MovieSearchTool(BaseTool):
         if not filtered_results:
             return "No movies found matching the query."
         
+        # Remove duplicates by title (case-insensitive)
+        seen_titles = set()
+        unique_results = []
+        for doc in filtered_results:
+            title = doc.metadata.get('title', 'Unknown').lower()
+            if title not in seen_titles:
+                seen_titles.add(title)
+                unique_results.append(doc)
+        
+        # Limit to top_k after deduplication
+        unique_results = unique_results[:self.top_k]
+        
         summaries = [
             f"{doc.metadata.get('title', 'Unknown')} ({doc.metadata.get('year', 'N/A')})"
-            for doc in filtered_results
+            for doc in unique_results
         ]
         return "; ".join(summaries)
     

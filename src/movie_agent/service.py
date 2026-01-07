@@ -876,7 +876,14 @@ class MovieAgentService:
             return movies
         
         validated_movies = []
+        seen_titles = set()  # Track seen titles to avoid duplicates
+        
         for movie_title in movies:
+            # Skip if we've already seen this title (case-insensitive)
+            title_lower = movie_title.strip().lower()
+            if title_lower in seen_titles:
+                continue
+            seen_titles.add(title_lower)
             # Normalize title for matching (remove punctuation, extra spaces)
             title_normalized = movie_title.strip().lower()
             
