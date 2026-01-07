@@ -155,9 +155,9 @@ class MovieAgentService:
         
         # Debug: Log quiz state for troubleshooting
         if quiz_active:
-            logger.info(f"✅ Quiz is ACTIVE for session {session_id[:8]}, question index: {quiz_state.current_question_index}, score: {quiz_state.score}/{quiz_state.get_total_questions()}")
+            logger.info(f"Quiz is active for session {session_id[:8]}, question index: {quiz_state.current_question_index}, score: {quiz_state.score}/{quiz_state.get_total_questions()}")
         else:
-            logger.warning(f"❌ Quiz is NOT active for session {session_id[:8]}. Quiz data exists: {bool(quiz_state.quiz_data)}, active flag: {quiz_state.active}")
+            logger.warning(f"Quiz is not active for session {session_id[:8]}. Quiz data exists: {bool(quiz_state.quiz_data)}, active flag: {quiz_state.active}")
         
         intent = detect_intent(user_message, quiz_active=quiz_active)
         
@@ -324,7 +324,6 @@ class MovieAgentService:
                 return response
         
         # Handle QUIZ_NEXT intent - user wants to continue to next question or stop quiz
-        # NOTE: This should only be reached if quiz is NOT active (handled above when quiz is active)
         if intent == AgentIntent.QUIZ_NEXT:
             # Quiz not active - start new quiz with stored quiz_type (continuation)
             stored_quiz_type = quiz_state.quiz_type or "year"
@@ -444,7 +443,7 @@ class MovieAgentService:
         elif intent == AgentIntent.RATING_LOOKUP:
             intent_context = "\n[IMPORTANT: User is asking about ratings. Use get_movie_statistics tool. For 'top 10' or 'list top ratings', use stat_type='top_rated' with limit=10. For 'highest rated', use stat_type='highest_rated'. For year ranges (e.g., 2000s), use filter_by with year_start and year_end (e.g., {'year_start': 2000, 'year_end': 2009}). DO NOT call the tool multiple times for each year - use year_start/year_end for ranges.]"
         elif intent == AgentIntent.MOVIE_COMPARISON:
-            intent_context = "\n[IMPORTANT: User wants to COMPARE SPECIFIC MOVIES. Use compare_movies tool with movie_a and movie_b parameters. DO NOT use get_movie_statistics for comparison - use compare_movies tool. The compare_movies tool will automatically include ratings in the comparison.]"
+            intent_context = "\n[IMPORTANT: User wants to COMPARE MOVIE RATINGS. Use get_movie_statistics tool with stat_type='top_rated' and limit=10 to show top-rated movies. If user mentions a category (e.g., 'action movies in 2000s'), use filter_by with genre and year_start/year_end. DO NOT use compare_movies tool - just show ratings using statistics tool.]"
         # REMOVED: QUIZ_ANSWER handling when quiz is active - this is now handled by controller above
         # The LLM should NEVER control quiz progression - only the controller does
         

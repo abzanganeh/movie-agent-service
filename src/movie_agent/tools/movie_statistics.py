@@ -4,6 +4,7 @@ Movie statistics tool for dataset-level analytics.
 Provides deterministic statistics about the movie dataset.
 No LLM dependency - pure data aggregation.
 """
+import json
 from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
@@ -43,7 +44,8 @@ class MovieStatisticsTool(BaseTool):
         "For single year, use {'year': 2020}. For genre, use {'genre': 'Action'}. "
         "highest_rated returns the movie(s) with highest rating. lowest_rated returns the movie(s) with lowest rating. "
         "top_rated returns the top N movies sorted by rating (use limit parameter, default 10). "
-        "When user asks for 'top 10' or 'list top ratings', use stat_type='top_rated' with limit=10."
+        "When user asks for 'top 10' or 'list top ratings' or 'compare ratings', use stat_type='top_rated' with limit=10. "
+        "For comparisons, use top_rated with appropriate filters (genre, year range) to show movies side-by-side by rating."
     )
     args_schema: type[BaseModel] = MovieStatisticsInput
     
@@ -76,13 +78,13 @@ class MovieStatisticsTool(BaseTool):
         # This works with both Pydantic v1 and v2
         movies = getattr(self, '_movies', [])
         if not movies:
-            return '{"error": "Movie dataset not loaded. Statistics tool unavailable."}'
+            return json.dumps({"error": "Movie dataset not loaded. Statistics tool unavailable."})
         
         # Apply filters if provided
         filtered_movies = self._apply_filters(movies, filter_by)
         
         if not filtered_movies:
-            return '{"error": "No movies match the filters"}'
+            return json.dumps({"error": "No movies match the filters"})
         
         if stat_type == "average_rating":
             ratings = [
@@ -90,9 +92,13 @@ class MovieStatisticsTool(BaseTool):
                 if m.imdb_rating is not None
             ]
             if not ratings:
-                return '{"average_rating": null, "note": "No ratings available"}'
+                return json.dumps({"average_rating": None, "note": "No ratings available"})
             avg = sum(ratings) / len(ratings)
-            return f'{{"average_rating": {avg:.2f}, "count": {len(ratings)}}}'
+            result = {
+                "average_rating": round(avg, 2),
+                "count": len(ratings)
+            }
+            return json.dumps(result)
         
         if stat_type == "highest_rated":
             movies_with_ratings = [
@@ -100,14 +106,18 @@ class MovieStatisticsTool(BaseTool):
                 if m.imdb_rating is not None
             ]
             if not movies_with_ratings:
-                return '{"error": "No movies with ratings found"}'
+                return json.dumps({"error": "No movies with ratings found"})
             max_rating = max(m.imdb_rating for m in movies_with_ratings)
             top_movies = [
                 {"title": m.title, "year": m.year, "rating": m.imdb_rating}
                 for m in movies_with_ratings
                 if m.imdb_rating == max_rating
             ]
-            return f'{{"highest_rating": {max_rating}, "movies": {top_movies}}}'
+            result = {
+                "highest_rating": max_rating,
+                "movies": top_movies
+            }
+            return json.dumps(result)
         
         if stat_type == "lowest_rated":
             movies_with_ratings = [
@@ -115,14 +125,18 @@ class MovieStatisticsTool(BaseTool):
                 if m.imdb_rating is not None
             ]
             if not movies_with_ratings:
-                return '{"error": "No movies with ratings found"}'
+                return json.dumps({"error": "No movies with ratings found"})
             min_rating = min(m.imdb_rating for m in movies_with_ratings)
             bottom_movies = [
                 {"title": m.title, "year": m.year, "rating": m.imdb_rating}
                 for m in movies_with_ratings
                 if m.imdb_rating == min_rating
             ]
-            return f'{{"lowest_rating": {min_rating}, "movies": {bottom_movies}}}'
+            result = {
+                "lowest_rating": min_rating,
+                "movies": bottom_movies
+            }
+            return json.dumps(result)
         
         if stat_type == "top_rated":
             movies_with_ratings = [
@@ -130,7 +144,7 @@ class MovieStatisticsTool(BaseTool):
                 if m.imdb_rating is not None
             ]
             if not movies_with_ratings:
-                return '{"error": "No movies with ratings found"}'
+                return json.dumps({"error": "No movies with ratings found"})
             # Sort by rating (descending) and take top N
             sorted_movies = sorted(
                 movies_with_ratings,
@@ -142,19 +156,24 @@ class MovieStatisticsTool(BaseTool):
                 {"title": m.title, "year": m.year, "rating": m.imdb_rating}
                 for m in top_n
             ]
-            return f'{{"top_rated": {top_movies}, "count": {len(top_movies)}, "limit": {limit}}}'
+            result = {
+                "top_rated": top_movies,
+                "count": len(top_movies),
+                "limit": limit
+            }
+            return json.dumps(result)
         
         if stat_type == "count":
-            return f'{{"count": {len(filtered_movies)}}}'
+            return json.dumps({"count": len(filtered_movies)})
         
         if stat_type == "genre_distribution":
             dist = {}
             for movie in filtered_movies:
                 for genre in movie.genres:
                     dist[genre] = dist.get(genre, 0) + 1
-            return f'{{"genre_distribution": {dist}}}'
+            return json.dumps({"genre_distribution": dist})
         
-        return '{"error": "Unknown stat_type"}'
+        return json.dumps({"error": "Unknown stat_type"})
     
     def _apply_filters(
         self,

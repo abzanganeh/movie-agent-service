@@ -70,3 +70,6 @@ models/
 # Local/internal documents
 local/
 
+# Configuration documentation (moved to local/)
+CONFIGURATION.md
+
