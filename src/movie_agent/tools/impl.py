@@ -69,51 +69,76 @@ class MovieSearchTool(BaseTool):
         OOP: Single Responsibility - filters results based on query patterns.
         
         Detects "like [title]" pattern in query and excludes that title.
+        Handles multi-word titles like "Home Alone" correctly.
         
         :param results: List of Document objects from search
         :param query: Search query string
         :return: Filtered list of documents
         """
         import re
+        import logging
         
-        # Detect "like [title]" pattern in query
-        # Examples: "like Home Alone", "similar to Home Alone", "movies like Home Alone"
-        like_patterns = [
-            r"like\s+(.+?)(?:\s|$|movies|movie)",
-            r"similar to\s+(.+?)(?:\s|$|movies|movie)",
-            r"more like\s+(.+?)(?:\s|$|movies|movie)",
-        ]
+        logger = logging.getLogger(__name__)
         
         exclude_title = None
         query_lower = query.lower()
         
-        for pattern in like_patterns:
-            match = re.search(pattern, query_lower, re.IGNORECASE)
-            if match:
-                exclude_title = match.group(1).strip()
-                break
+        # Priority 1: Extract title from end of query (most reliable for complete titles)
+        # Pattern: "like [title]" at end of query
+        # Example: "comedy family movies like Home Alone"
+        end_pattern = r"like\s+(.+)$"
+        match = re.search(end_pattern, query_lower, re.IGNORECASE)
+        if match:
+            exclude_title = match.group(1).strip()
+            logger.debug(f"Filter: Extracted title from end pattern: '{exclude_title}'")
         
-        # If no pattern found, check if query ends with a title (common in similarity queries)
-        # This handles queries like "comedy family movies like Home Alone"
+        # Priority 2: Extract from "like [title]" anywhere in query (use greedy match for full title)
         if not exclude_title:
-            # Try to extract title from end of query after "like"
-            end_pattern = r"like\s+(.+)$"
-            match = re.search(end_pattern, query_lower, re.IGNORECASE)
-            if match:
-                exclude_title = match.group(1).strip()
+            like_patterns = [
+                r"like\s+(.+?)(?:\s+movies|\s+movie|$)",  # Match until "movies", "movie", or end
+                r"similar to\s+(.+?)(?:\s+movies|\s+movie|$)",
+                r"more like\s+(.+?)(?:\s+movies|\s+movie|$)",
+            ]
+            
+            for pattern in like_patterns:
+                match = re.search(pattern, query_lower, re.IGNORECASE)
+                if match:
+                    exclude_title = match.group(1).strip()
+                    logger.debug(f"Filter: Extracted title from pattern '{pattern}': '{exclude_title}'")
+                    break
         
         # Filter out the excluded title (case-insensitive comparison)
         if exclude_title:
-            filtered = []
             exclude_lower = exclude_title.lower()
+            logger.info(f"Filter: Excluding movie '{exclude_title}' from results")
+            
+            filtered = []
             for doc in results:
                 doc_title = doc.metadata.get('title', '')
-                if doc_title and doc_title.lower() != exclude_lower:
-                    filtered.append(doc)
+                doc_title_lower = doc_title.lower() if doc_title else ''
+                
+                # Exact match
+                if doc_title_lower == exclude_lower:
+                    logger.debug(f"Filter: Excluded '{doc_title}' (exact match)")
+                    continue
+                
+                # Partial match check (in case title has variations)
+                # Only exclude if the exclude_title is a complete word match
+                if exclude_lower in doc_title_lower:
+                    # Check if it's a word boundary match (avoid false positives)
+                    # For "Home Alone", exclude "Home Alone" but not "Alone in Berlin"
+                    if re.search(r'\b' + re.escape(exclude_lower) + r'\b', doc_title_lower):
+                        logger.debug(f"Filter: Excluded '{doc_title}' (word boundary match)")
+                        continue
+                
+                filtered.append(doc)
             
             # If filtering removed all results, return original results (edge case)
             if filtered:
+                logger.info(f"Filter: Filtered {len(results)} results to {len(filtered)} (excluded '{exclude_title}')")
                 return filtered
+            else:
+                logger.warning(f"Filter: Filtering removed all results, returning original results")
         
         return results
     
