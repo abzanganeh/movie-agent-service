@@ -818,11 +818,26 @@ class MovieAgentService:
         elif "60s" in query_lower or "sixties" in query_lower or "1960s" in query_lower:
             year_range = (1960, 1969)
         else:
+            # Extract specific year from query (e.g., "in 1990", "from 1990", "movies 1990")
             year_pattern = r'\b(19|20)\d{2}\b'
             years = [int(m.group()) for m in re.finditer(year_pattern, query_lower)]
             if years:
                 target_year = years[0]
-                year_range = (target_year - 2, target_year + 2)
+                # Check if query specifies exact year (e.g., "in 1990", "from 1990")
+                # vs decade range (e.g., "90s", "1990s")
+                exact_year_patterns = [
+                    r'\bin\s+' + str(target_year) + r'\b',
+                    r'\bfrom\s+' + str(target_year) + r'\b',
+                    r'\breleased\s+in\s+' + str(target_year) + r'\b',
+                ]
+                is_exact_year = any(re.search(pattern, query_lower, re.IGNORECASE) for pattern in exact_year_patterns)
+                
+                if is_exact_year:
+                    # Exact year: use ±1 year for flexibility (e.g., 1989-1991 for 1990)
+                    year_range = (target_year - 1, target_year + 1)
+                else:
+                    # Decade or approximate: use ±2 years
+                    year_range = (target_year - 2, target_year + 2)
         
         genre_keywords = {
             "action": "action",
@@ -861,19 +876,41 @@ class MovieAgentService:
         
         validated_movies = []
         for movie_title in movies:
-            movie_obj = next((m for m in self._movies if m.title.lower() == movie_title.lower()), None)
+            # Normalize title for matching (remove punctuation, extra spaces)
+            title_normalized = movie_title.strip().lower()
+            
+            # Try exact match first
+            movie_obj = next((m for m in self._movies if m.title.lower() == title_normalized), None)
+            
+            # If no exact match, try partial match (handles punctuation differences)
             if not movie_obj:
+                for m in self._movies:
+                    m_title_normalized = m.title.strip().lower()
+                    # Remove common punctuation for matching
+                    m_title_clean = re.sub(r'[^\w\s]', '', m_title_normalized).strip()
+                    title_clean = re.sub(r'[^\w\s]', '', title_normalized).strip()
+                    if m_title_clean == title_clean:
+                        movie_obj = m
+                        break
+            
+            if not movie_obj:
+                # Movie not found in database - skip it if we have constraints
+                # (better to exclude unknown movies when filtering by year/genre)
+                if year_range or target_genre:
+                    continue  # Skip unknown movies when filtering
                 validated_movies.append(movie_title)
                 continue
             
+            # Apply year constraint
             if year_range and movie_obj.year:
                 if not (year_range[0] <= movie_obj.year <= year_range[1]):
-                    continue
+                    continue  # Year doesn't match, skip this movie
             
+            # Apply genre constraint
             if target_genre and movie_obj.genres:
                 movie_genres = [g.lower() for g in movie_obj.genres]
-                if target_genre not in movie_genres:
-                    continue
+                if target_genre.lower() not in movie_genres:
+                    continue  # Genre doesn't match, skip this movie
             
             validated_movies.append(movie_title)
         
