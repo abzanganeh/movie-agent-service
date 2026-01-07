@@ -4,6 +4,7 @@ from langchain.tools import BaseTool
 from langchain_core.documents import Document
 from .retriever_tool import RetrieverTool
 from .vision_tool import VisionTool
+from .similarity_analyzer import SimilarityQueryAnalyzer
 from ..schemas import PosterAnalysisResponse
 
 
@@ -66,46 +67,21 @@ class MovieSearchTool(BaseTool):
         """
         Filter out the original movie from similarity search results.
         
-        OOP: Single Responsibility - filters results based on query patterns.
-        
-        Detects "like [title]" pattern in query and excludes that title.
-        Handles multi-word titles like "Home Alone" correctly.
+        OOP: Single Responsibility - ACTS only (filters results).
+        Does NOT decide - uses SimilarityQueryAnalyzer to decide what to exclude.
+        Follows design rule: Tool acts, analyzer decides.
         
         :param results: List of Document objects from search
         :param query: Search query string
         :return: Filtered list of documents
         """
-        import re
         import logging
+        import re
         
         logger = logging.getLogger(__name__)
         
-        exclude_title = None
-        query_lower = query.lower()
-        
-        # Priority 1: Extract title from end of query (most reliable for complete titles)
-        # Pattern: "like [title]" at end of query
-        # Example: "comedy family movies like Home Alone"
-        end_pattern = r"like\s+(.+)$"
-        match = re.search(end_pattern, query_lower, re.IGNORECASE)
-        if match:
-            exclude_title = match.group(1).strip()
-            logger.debug(f"Filter: Extracted title from end pattern: '{exclude_title}'")
-        
-        # Priority 2: Extract from "like [title]" anywhere in query (use greedy match for full title)
-        if not exclude_title:
-            like_patterns = [
-                r"like\s+(.+?)(?:\s+movies|\s+movie|$)",  # Match until "movies", "movie", or end
-                r"similar to\s+(.+?)(?:\s+movies|\s+movie|$)",
-                r"more like\s+(.+?)(?:\s+movies|\s+movie|$)",
-            ]
-            
-            for pattern in like_patterns:
-                match = re.search(pattern, query_lower, re.IGNORECASE)
-                if match:
-                    exclude_title = match.group(1).strip()
-                    logger.debug(f"Filter: Extracted title from pattern '{pattern}': '{exclude_title}'")
-                    break
+        # OOP: Decision is made by SimilarityQueryAnalyzer (decides), not by this Tool (acts)
+        exclude_title = SimilarityQueryAnalyzer.extract_exclude_title(query)
         
         # Filter out the excluded title (case-insensitive comparison)
         if exclude_title:
