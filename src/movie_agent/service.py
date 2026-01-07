@@ -818,26 +818,27 @@ class MovieAgentService:
         elif "60s" in query_lower or "sixties" in query_lower or "1960s" in query_lower:
             year_range = (1960, 1969)
         else:
-            # Extract specific year from query (e.g., "in 1990", "from 1990", "movies 1990")
+            # Extract specific year from query (e.g., "in 1990", "from 1990", "movies 1990", "2002 movies")
             year_pattern = r'\b(19|20)\d{2}\b'
             years = [int(m.group()) for m in re.finditer(year_pattern, query_lower)]
             if years:
                 target_year = years[0]
-                # Check if query specifies exact year (e.g., "in 1990", "from 1990")
-                # vs decade range (e.g., "90s", "1990s")
-                exact_year_patterns = [
-                    r'\bin\s+' + str(target_year) + r'\b',
-                    r'\bfrom\s+' + str(target_year) + r'\b',
-                    r'\breleased\s+in\s+' + str(target_year) + r'\b',
-                ]
-                is_exact_year = any(re.search(pattern, query_lower, re.IGNORECASE) for pattern in exact_year_patterns)
                 
-                if is_exact_year:
-                    # Exact year: use ±1 year for flexibility (e.g., 1989-1991 for 1990)
-                    year_range = (target_year - 1, target_year + 1)
-                else:
-                    # Decade or approximate: use ±2 years
+                # Check if it's a decade range (e.g., "90s", "1990s") - these should use ±2 years
+                decade_patterns = [
+                    r'\b' + str(target_year)[:3] + r'0s\b',  # "1990s", "2000s"
+                    r'\b' + str(target_year)[2:] + r's\b',   # "90s", "00s"
+                ]
+                is_decade_range = any(re.search(pattern, query_lower, re.IGNORECASE) for pattern in decade_patterns)
+                
+                # If it's not a decade range, treat as exact year (any 4-digit year like 1990, 2002, 2013)
+                # This covers: "movies 2002", "action movies in 2013", "2002 action movies", etc.
+                if is_decade_range:
+                    # Decade range: use ±2 years (e.g., 1990s -> 1988-1992)
                     year_range = (target_year - 2, target_year + 2)
+                else:
+                    # Exact year (any 4-digit year): use ±1 year for flexibility (e.g., 2002 -> 2001-2003)
+                    year_range = (target_year - 1, target_year + 1)
         
         genre_keywords = {
             "action": "action",
