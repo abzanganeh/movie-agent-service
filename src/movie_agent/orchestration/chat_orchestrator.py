@@ -130,12 +130,15 @@ class ChatOrchestrator:
             context_parts.append(
                 f"- CRITICAL: User wants SIMILAR movies by GENRE/MOOD, not just title similarity. "
                 f"To find similar movies, you MUST:\n"
-                f"  1. First, look up '{poster.title}' using movie_search to get its ACTUAL genres from the database\n"
-                f"  2. Extract ALL genres from that movie's metadata (e.g., 'Comedy, Family' not just 'Comedy')\n"
-                f"  3. Build a genre-based query using ALL genres with the format: '{genre_query} like {poster.title}'\n"
-                f"     Example: If '{poster.title}' is 'Home Alone' with genres 'Comedy, Family', "
-                f"use query: 'comedy family movies like Home Alone' (NOT just 'comedy movies')\n"
-                f"  4. Search using movie_search with this query - the tool will automatically exclude '{poster.title}' from results"
+                f"  1. First, look up '{poster.title}' using movie_search with query: '{poster.title}'\n"
+                f"  2. From the search results, find the movie '{poster.title}' and extract its ACTUAL genres from the database\n"
+                f"  3. Use ONLY the genres that are actually in the database - do NOT add genres like 'family' if they're not in the database\n"
+                f"  4. Build a genre-based query using ONLY those actual genres with format: '[actual genres] movies like {poster.title}'\n"
+                f"     Example: If '{poster.title}' is 'Home Alone' and database shows 'Genres: Comedy' (not 'Comedy, Family'), "
+                f"use query: 'comedy movies like Home Alone' (NOT 'comedy family movies' if 'family' is not in the database)\n"
+                f"  5. Search using movie_search with this query - the tool will automatically exclude '{poster.title}' from results\n"
+                f"IMPORTANT: Use ONLY the genres from the database lookup, NOT inferred genres or assumed genres. "
+                f"If the database only has one genre, use that one genre in the query."
             )
         else:
             fallback_genres = ', '.join(poster.inferred_genres) if poster.inferred_genres else poster.mood
