@@ -151,7 +151,16 @@ class MovieStatisticsTool(BaseTool):
                 key=lambda m: m.imdb_rating,
                 reverse=True
             )
-            top_n = sorted_movies[:limit]
+            # Deduplicate by title+year (case-insensitive)
+            seen = set()
+            unique_movies = []
+            for m in sorted_movies:
+                key = (m.title.lower().strip(), m.year)
+                if key not in seen:
+                    seen.add(key)
+                    unique_movies.append(m)
+            
+            top_n = unique_movies[:limit]
             top_movies = [
                 {"title": m.title, "year": m.year, "rating": m.imdb_rating}
                 for m in top_n
