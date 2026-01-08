@@ -154,3 +154,5 @@ class QuizController:
         """Get total number of questions."""
         return self._quiz_state.get_total_questions()
 
+
+

@@ -103,11 +103,14 @@ class ToolCallingAgent:
                 
                 # Extract tool output
                 if isinstance(tool_output, str):
-                    tool_outputs.append(tool_output)
+                    # OOP: Delegation - format tool output BEFORE storing
+                    # This ensures each tool output is properly formatted
+                    formatted_output = ToolOutputFormatterFactory.format_output(tool_name, tool_output)
+                    tool_outputs.append(formatted_output)
                     
                     # Parse movie_search output: "Title (Year); Title (Year); ..."
                     if tool_name == 'movie_search':
-                        # Extract movie titles and years
+                        # Extract movie titles and years from original output (before formatting)
                         pattern = r'([^(]+)\s*\((\d{4})\)'
                         matches = re.findall(pattern, tool_output)
                         for title, year in matches:
@@ -126,16 +129,26 @@ class ToolCallingAgent:
                                     quiz_data = json.loads(json_match.group())
                                 except Exception:
                                     pass
-                    
-                    # OOP: Delegation - use formatter factory to format tool outputs
-                    # This separates formatting concerns from agent execution logic
-                    formatted_output = ToolOutputFormatterFactory.format_output(tool_name, tool_output)
-                    if formatted_output != tool_output:
-                        tool_outputs[-1] = formatted_output
         
         # Format answer from tool output
+        # OOP: Prioritize statistics output over search output when both are present
+        # This ensures user gets the statistics they requested, not just search results
         if tool_outputs:
-            answer = tool_outputs[-1]  # Use last tool output
+            # Check if we have statistics output (higher priority)
+            statistics_output = None
+            statistics_tool_name = None
+            for i, tool_name in enumerate(tools_used):
+                if tool_name == 'get_movie_statistics':
+                    statistics_output = tool_outputs[i]
+                    statistics_tool_name = tool_name
+                    break
+            
+            if statistics_output:
+                # Use statistics output (formatted by StatisticsFormatter)
+                answer = statistics_output
+            else:
+                # Use last tool output (usually movie_search)
+                answer = tool_outputs[-1]
             
             # Quiz data is handled by service layer - just pass through
             # Service will serve one question at a time
@@ -146,8 +159,8 @@ class ToolCallingAgent:
                     # Simple message - service will handle structured response
                     answer = f"Quiz generated: {topic} ({len(questions)} questions)"
             
-            # If it's a list of movies, format it nicely
-            elif movies:
+            # If it's a list of movies (and not statistics), format it nicely
+            elif movies and not statistics_output:
                 # Re-parse for display (extract year from original output)
                 pattern = r'([^(]+)\s*\((\d{4})\)'
                 matches = re.findall(pattern, tool_outputs[-1])

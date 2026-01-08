@@ -6,6 +6,7 @@ Reads from SessionContext and orchestrates chat interactions.
 from ..agent.tool_calling_agent import ToolCallingAgent
 from ..context.session_context import SessionContext
 from ..memory.session_state import SessionState
+from .query_relevance_detector import QueryRelevanceDetector
 
 
 class ChatOrchestrator:
@@ -39,6 +40,7 @@ class ChatOrchestrator:
         Enrich user message with session context.
         
         OOP: Orchestrates enrichment by delegating to specialized methods.
+        OOP: Only adds poster context if query is relevant (prevents context pollution).
         
         :param user_message: Original user message
         :return: Enriched message with context
@@ -47,10 +49,18 @@ class ChatOrchestrator:
         
         if self._session_context.has_poster():
             poster = self._session_context.poster
-            if poster.has_title():
-                enriched = self._build_poster_context_with_title(poster, user_message)
-            else:
-                enriched = self._build_poster_context_without_title(poster, user_message)
+            # OOP: Delegate relevance detection to QueryRelevanceDetector
+            is_related = QueryRelevanceDetector.is_query_related_to_poster(
+                user_message, 
+                poster.title if poster.has_title() else None
+            )
+            
+            if is_related:
+                if poster.has_title():
+                    enriched = self._build_poster_context_with_title(poster, user_message)
+                else:
+                    enriched = self._build_poster_context_without_title(poster, user_message)
+            # If not related, skip poster context (prevents polluting unrelated queries)
         
         enriched = self._append_quiz_context(enriched)
         
