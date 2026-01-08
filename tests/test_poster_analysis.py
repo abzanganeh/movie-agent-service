@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Add service to path
-service_dir = Path(__file__).parent
+service_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(service_dir / "src"))
 
 from movie_agent.app import MovieAgentApp
@@ -95,9 +95,4 @@ if __name__ == "__main__":
     print(f"\n{'='*60}")
     print(f"Results: {sum(results)}/{len(results)} passed")
     print(f"{'='*60}")
-
-
-
-
-
 
