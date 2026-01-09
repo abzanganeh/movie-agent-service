@@ -25,6 +25,14 @@ class MovieStatisticsInput(BaseModel):
         le=50,
         description="For top_rated stat_type: number of top-rated movies to return (default 10, max 50)"
     )
+    year: Optional[int] = Field(
+        default=None,
+        description="DEPRECATED: Use filter_by={'year': <year>} instead. If provided, will be moved to filter_by automatically."
+    )
+    
+    class Config:
+        # Allow extra fields to be ignored (for backward compatibility)
+        extra = "ignore"
 
 
 class MovieStatisticsTool(BaseTool):
@@ -41,7 +49,8 @@ class MovieStatisticsTool(BaseTool):
         "Stat types: average_rating, count, genre_distribution, highest_rated, lowest_rated, top_rated. "
         "For year ranges (e.g., 2000s), use filter_by with 'year_start' and 'year_end' (e.g., {'year_start': 2000, 'year_end': 2009}). "
         "DO NOT call this tool multiple times for each year - use year_start/year_end for ranges. "
-        "For single year, use {'year': 2020}. For genre, use {'genre': 'Action'}. "
+        "IMPORTANT: For single year filtering, ALWAYS use filter_by={'year': 2020} - NEVER use 'year' as a top-level parameter. "
+        "For genre, use filter_by={'genre': 'Action'}. "
         "highest_rated returns the movie(s) with highest rating. lowest_rated returns the movie(s) with lowest rating. "
         "top_rated returns the top N movies sorted by rating (use limit parameter, default 10). "
         "When user asks for 'top 10' or 'list top ratings' or 'compare ratings', use stat_type='top_rated' with limit=10. "
@@ -65,15 +74,31 @@ class MovieStatisticsTool(BaseTool):
         self,
         stat_type: str,
         filter_by: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = 10
+        limit: Optional[int] = 10,
+        year: Optional[int] = None,
+        **kwargs
     ) -> str:
         """
         Compute statistics on the movie dataset.
         
         :param stat_type: Type of statistic to compute
         :param filter_by: Optional filters to apply
+        :param limit: Limit for top_rated results
+        :param year: DEPRECATED: Year filter (will be moved to filter_by). Use filter_by={'year': <year>} instead.
+        :param kwargs: Additional arguments
         :return: JSON string with statistics
         """
+        # Normalize parameters: if 'year' is passed at top level, move it to filter_by
+        if filter_by is None:
+            filter_by = {}
+        else:
+            # Make a copy to avoid mutating the original
+            filter_by = dict(filter_by)
+        
+        # Handle year parameter at top level (LLM sometimes passes it incorrectly)
+        if year is not None and 'year' not in filter_by:
+            filter_by['year'] = year
+        
         # Check if movies are available (use getattr to safely access private attribute)
         # This works with both Pydantic v1 and v2
         movies = getattr(self, '_movies', [])
@@ -81,7 +106,7 @@ class MovieStatisticsTool(BaseTool):
             return json.dumps({"error": "Movie dataset not loaded. Statistics tool unavailable."})
         
         # Apply filters if provided
-        filtered_movies = self._apply_filters(movies, filter_by)
+        filtered_movies = self._apply_filters(movies, filter_by if filter_by else None)
         
         if not filtered_movies:
             return json.dumps({"error": "No movies match the filters"})
@@ -233,8 +258,10 @@ class MovieStatisticsTool(BaseTool):
         self,
         stat_type: str,
         filter_by: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = 10
+        limit: Optional[int] = 10,
+        year: Optional[int] = None,
+        **kwargs
     ) -> str:
         """Async version of _run."""
-        return self._run(stat_type, filter_by, limit)
+        return self._run(stat_type, filter_by, limit, year, **kwargs)
 
