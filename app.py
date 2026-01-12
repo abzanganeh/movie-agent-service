@@ -178,17 +178,28 @@ def chat():
         # Route intent
         intent = intent_router.route(query)
         
-        # Get or create session ID (same pattern as demo app)
+        # Get or create session ID
+        # Try Flask session first, then fallback to header (for Hugging Face Spaces cookie issues)
         import uuid
-        if 'session_id' not in session:
-            session['session_id'] = str(uuid.uuid4())
-            logger.info(f"Created new session: {session['session_id']}")
-            # Debug: log session cookie info
-            logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}, "
-                       f"SameSite: {app.config.get('SESSION_COOKIE_SAMESITE')}")
+        session_id = None
+        
+        # Check Flask session
+        if 'session_id' in session:
+            session_id = session['session_id']
+            logger.info(f"Using Flask session: {session_id}")
         else:
-            logger.info(f"Reusing existing session: {session['session_id']}")
-        session_id = session['session_id']
+            # Fallback: Check for session ID in custom header (for Spaces cookie issues)
+            session_id_header = request.headers.get('X-Session-ID')
+            if session_id_header:
+                session_id = session_id_header
+                # Store in Flask session for future requests
+                session['session_id'] = session_id
+                logger.info(f"Using header session ID (stored in session): {session_id}")
+            else:
+                # Create new session ID
+                session_id = str(uuid.uuid4())
+                session['session_id'] = session_id
+                logger.info(f"Created new session: {session_id}")
         
         logger.info(f"Chat query - Session: {session_id}, Intent: {intent.name}")
         
@@ -259,12 +270,20 @@ def poster():
             return jsonify({"error": f"File validation failed: {error_msg}"}), 400
         
         try:
-            # Get or create session ID (same pattern as demo app)
+            # Get or create session ID (with header fallback for Spaces)
             import uuid
-            if 'session_id' not in session:
-                session['session_id'] = str(uuid.uuid4())
-                logger.info(f"Created new session for poster: {session['session_id']}")
-            session_id = session['session_id']
+            session_id = None
+            if 'session_id' in session:
+                session_id = session['session_id']
+            else:
+                session_id_header = request.headers.get('X-Session-ID')
+                if session_id_header:
+                    session_id = session_id_header
+                    session['session_id'] = session_id
+                else:
+                    session_id = str(uuid.uuid4())
+                    session['session_id'] = session_id
+                    logger.info(f"Created new session for poster: {session_id}")
             
             logger.info(f"Analyzing poster - Session: {session_id}, File: {file.filename}")
             
