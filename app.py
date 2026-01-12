@@ -49,6 +49,12 @@ app = Flask(__name__)
 # If FLASK_SECRET_KEY env var is set, use it; otherwise use a fixed default
 # IMPORTANT: Don't regenerate on each startup - sessions won't persist!
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "movie-agent-service-secret-key-2024")
+
+# Configure session cookies for persistence
+# For Hugging Face Spaces (HTTPS), we need Secure=True and SameSite=None
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get("FLASK_SESSION_SECURE", "true").lower() == "true"
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Lax works for same-site, None needed for cross-site
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
@@ -175,8 +181,12 @@ def chat():
         
         # Get or create session ID
         import uuid
+        from datetime import timedelta
+        
         if 'session_id' not in session:
             session['session_id'] = str(uuid.uuid4())
+            session.permanent = True  # Mark session as permanent
+            logger.info(f"Created new session: {session['session_id']}")
         session_id = session['session_id']
         
         logger.info(f"Chat query - Session: {session_id}, Intent: {intent.name}")
@@ -249,12 +259,14 @@ def poster():
         
         try:
             # Get or create session ID
-            import uuid
-            if 'session_id' not in session:
-                session['session_id'] = str(uuid.uuid4())
-            session_id = session['session_id']
-            
-            logger.info(f"Analyzing poster - Session: {session_id}, File: {file.filename}")
+                import uuid
+                if 'session_id' not in session:
+                    session['session_id'] = str(uuid.uuid4())
+                    session.permanent = True  # Mark session as permanent
+                    logger.info(f"Created new session for poster: {session['session_id']}")
+                session_id = session['session_id']
+                
+                logger.info(f"Analyzing poster - Session: {session_id}, File: {file.filename}")
             
             poster_response = agent_app.analyze_poster(tmp_path, session_id=session_id)
             
@@ -294,12 +306,13 @@ def about():
 def clear_poster():
     """Clear poster state from session."""
     try:
-        import uuid
-        if 'session_id' not in session:
-            session['session_id'] = str(uuid.uuid4())
-        session_id = session['session_id']
-        
-        if agent_app and hasattr(agent_app, '_service'):
+            import uuid
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+                session.permanent = True  # Mark session as permanent
+            session_id = session['session_id']
+            
+            if agent_app and hasattr(agent_app, '_service'):
             agent_app._service.clear_memory(session_id)
         
         session.pop('poster_state', None)
