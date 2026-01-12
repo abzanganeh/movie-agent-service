@@ -77,8 +77,10 @@ cp -r ../movie-agent-demo/static ./
 # Copy data
 cp -r ../movie-agent-service/data ./
 
-# Copy vector store (optional, speeds up first build)
-cp -r ../movie-agent-service/movie_vectorstore ./ 2>/dev/null || echo "Vector store will be built on first run"
+# Note: Vector store and binary files are NOT copied (too large for git)
+# Vector store will be built automatically on first run (takes a few minutes)
+# Create .gitignore to exclude large/binary files
+echo -e "movie_vectorstore/\n*.png\n__pycache__/\n*.pyc" > .gitignore
 ```
 
 **What you're copying:**
@@ -117,6 +119,24 @@ git commit -m "Initial Flask deployment"
 # Push to Hugging Face
 git push
 ```
+
+**Authentication**: When prompted for credentials:
+- **Username**: Your Hugging Face username
+- **Password**: Your Hugging Face access token (not your account password!)
+
+**To create an access token:**
+1. Go to https://huggingface.co/settings/tokens
+2. Click "New token"
+3. Name it (e.g., "movie-agent-deployment")
+4. Select "Write" permissions
+5. Copy the token (starts with `hf_...`)
+6. Use this token as the password when pushing
+
+**Tip**: Configure git to remember credentials:
+```bash
+git config --global credential.helper osxkeychain
+```
+Then you'll only need to enter credentials once.
 
 The Space will automatically start building (check the **Logs** tab).
 
@@ -174,14 +194,50 @@ The Space will automatically start building (check the **Logs** tab).
 
 ### Vector Store Build Time
 
-- **First run**: Vector store builds automatically (takes a few minutes)
-- **Speed up**: Copy pre-built `movie_vectorstore/` directory to skip build
+- **First run**: Vector store builds automatically (takes 5-10 minutes)
+- **Large files**: Vector store files are too large (>10MB) for git, so they're not included
+- **Automatic**: The app will build the vector store from `data/movies.csv` on first startup
 - **Check logs**: Vector store build progress is visible in logs
+- **Note**: If you need to include it, use Git LFS (see troubleshooting below)
 
 ### Port Issues
 
 - **Automatic**: Hugging Face Spaces sets `PORT` environment variable automatically
 - **Don't hardcode**: App reads `PORT` from environment (default: 7860)
+
+### Large Files Error (>10MB) or Binary Files Error
+
+If you get errors about large files or binary files:
+
+**Solution (Recommended)**: Exclude large/binary files
+- Vector store: Will be built automatically on first run
+- Binary files (PNG, etc.): Not needed for deployment
+- Python cache: Should never be committed
+
+Create/update `.gitignore`:
+```bash
+echo -e "movie_vectorstore/\n*.png\n__pycache__/\n*.pyc" > .gitignore
+git rm --cached -r movie_vectorstore/ data/posters/ src/**/__pycache__/ 2>/dev/null
+git add .gitignore
+git commit --amend --no-edit
+git push --force
+```
+
+**Alternative**: Use Git LFS (if you must include large files)
+```bash
+# Install Git LFS
+brew install git-lfs  # macOS
+# or: apt-get install git-lfs  # Linux
+
+# Initialize in your repo
+cd hf-space
+git lfs install
+git lfs track "movie_vectorstore/*.faiss"
+git lfs track "movie_vectorstore/*.pkl"
+git add .gitattributes
+git commit -m "Add Git LFS tracking for vector store"
+git push
+```
 
 ## Updating Your Deployment
 
@@ -224,11 +280,10 @@ hf-space/
 ├── static/                 ← Static files (from movie-agent-demo)
 │   ├── style.css
 │   └── script.js
-├── data/                   ← Movie data
-│   └── movies.csv
-└── movie_vectorstore/      ← Vector store (pre-built or built on first run)
-    ├── index.faiss
-    └── index.pkl
+└── data/                   ← Movie data
+    └── movies.csv
+
+Note: `movie_vectorstore/` is NOT included (too large for git). It will be built automatically on first run.
 ```
 
 ## Quick Reference
