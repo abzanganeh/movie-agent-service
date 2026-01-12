@@ -259,14 +259,14 @@ def poster():
         
         try:
             # Get or create session ID
-                import uuid
-                if 'session_id' not in session:
-                    session['session_id'] = str(uuid.uuid4())
-                    session.permanent = True  # Mark session as permanent
-                    logger.info(f"Created new session for poster: {session['session_id']}")
-                session_id = session['session_id']
-                
-                logger.info(f"Analyzing poster - Session: {session_id}, File: {file.filename}")
+            import uuid
+            if 'session_id' not in session:
+                session['session_id'] = str(uuid.uuid4())
+                session.permanent = True  # Mark session as permanent
+                logger.info(f"Created new session for poster: {session['session_id']}")
+            session_id = session['session_id']
+            
+            logger.info(f"Analyzing poster - Session: {session_id}, File: {file.filename}")
             
             poster_response = agent_app.analyze_poster(tmp_path, session_id=session_id)
             
@@ -306,13 +306,13 @@ def about():
 def clear_poster():
     """Clear poster state from session."""
     try:
-            import uuid
-            if 'session_id' not in session:
-                session['session_id'] = str(uuid.uuid4())
-                session.permanent = True  # Mark session as permanent
-            session_id = session['session_id']
-            
-            if agent_app and hasattr(agent_app, '_service'):
+        import uuid
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+            session.permanent = True  # Mark session as permanent
+        session_id = session['session_id']
+        
+        if agent_app and hasattr(agent_app, '_service'):
             agent_app._service.clear_memory(session_id)
         
         session.pop('poster_state', None)
