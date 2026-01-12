@@ -17,9 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY app.py ./
 
-# Copy templates and static files (if they exist)
-COPY templates/ ./templates/ 2>/dev/null || true
-COPY static/ ./static/ 2>/dev/null || true
+# Note: Templates and static should come from movie-agent-demo (not in service)
+# If deploying from movie-agent-demo, copy them there
+# Templates and static are NOT part of the service library
 
 # Copy data directory (if exists)
 COPY data/ ./data/ 2>/dev/null || true
