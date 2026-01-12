@@ -45,18 +45,10 @@ from movie_agent.security import InputValidator, FileValidator, ValidationError
 load_dotenv()
 
 app = Flask(__name__)
-# Use fixed secret key for session persistence
-# If FLASK_SECRET_KEY env var is set, use it; otherwise use a fixed default
-# IMPORTANT: Don't regenerate on each startup - sessions won't persist!
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "movie-agent-service-secret-key-2024")
-
-# Configure session cookies for persistence
-# For Hugging Face Spaces (HTTPS), we need Secure=True and SameSite=None
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get("FLASK_SESSION_SECURE", "true").lower() == "true"
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Lax works for same-site, None needed for cross-site
-app.config['SESSION_PERMANENT'] = True
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+# Use fixed secret key for session persistence (required for Hugging Face Spaces)
+# In local dev, os.urandom(32) works because server stays running, but in Spaces
+# we need a fixed key so sessions persist across deployments/restarts
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "movie-agent-service-secret-key-2024-fixed-for-spaces")
 
 # Setup logging
 logging.basicConfig(
@@ -179,13 +171,10 @@ def chat():
         # Route intent
         intent = intent_router.route(query)
         
-        # Get or create session ID
+        # Get or create session ID (same pattern as demo app)
         import uuid
-        from datetime import timedelta
-        
         if 'session_id' not in session:
             session['session_id'] = str(uuid.uuid4())
-            session.permanent = True  # Mark session as permanent
             logger.info(f"Created new session: {session['session_id']}")
         session_id = session['session_id']
         
@@ -258,11 +247,10 @@ def poster():
             return jsonify({"error": f"File validation failed: {error_msg}"}), 400
         
         try:
-            # Get or create session ID
+            # Get or create session ID (same pattern as demo app)
             import uuid
             if 'session_id' not in session:
                 session['session_id'] = str(uuid.uuid4())
-                session.permanent = True  # Mark session as permanent
                 logger.info(f"Created new session for poster: {session['session_id']}")
             session_id = session['session_id']
             
@@ -309,7 +297,6 @@ def clear_poster():
         import uuid
         if 'session_id' not in session:
             session['session_id'] = str(uuid.uuid4())
-            session.permanent = True  # Mark session as permanent
         session_id = session['session_id']
         
         if agent_app and hasattr(agent_app, '_service'):
