@@ -12,9 +12,12 @@ faiss-cpu
 # LLM Providers
 groq
 
-# Web Framework
+# Web Framework (Flask)
 flask>=2.3.0
 python-dotenv>=1.0.0
+werkzeug>=2.3.0
+flask-limiter>=3.0.0
+cryptography>=41.0.0
 
 # Data Processing
 pandas>=2.0.0

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - Movie Agent Service</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .about-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .about-section {
+            margin-bottom: 30px;
+        }
+        .about-section h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        .about-section h3 {
+            color: #34495e;
+            margin-top: 25px;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .comparison-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        .comparison-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .comparison-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .architecture-flow {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .limitation {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .advantage {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #3498db;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .code-link {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .code-link:hover {
+            text-decoration: underline;
+        }
+        ul {
+            margin-left: 20px;
+        }
+        .oop-principles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .oop-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #3498db;
+        }
+        .oop-card h4 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Movie Agent Service</h1>
+            <p class="subtitle">About This Project</p>
+            <a href="{{ url_for('index') }}" class="back-link">← Back to Chat</a>
+        </header>
+
+        <div class="about-container">
+            <div class="about-section">
+                <h2>Project Overview</h2>
+                <p>
+                    This is not just a "prompt + LLM" demo. It is a well-structured agent-based system designed with production-minded principles.
+                </p>
+                
+                <p>
+                    <strong>🔹 Movie Agent Service (Backend / Agent Layer):</strong><br>
+                    <a href="https://github.com/abzanganeh/movie-agent-service" target="_blank" class="code-link">https://github.com/abzanganeh/movie-agent-service</a>
+                </p>
+                
+                <p>
+                    <strong>🔹 Movie Agent Demo (Flask App / UI Layer):</strong><br>
+                    <a href="https://github.com/abzanganeh/movie-agent-demo" target="_blank" class="code-link">https://github.com/abzanganeh/movie-agent-demo</a>
+                </p>
+            </div>
+
+            <div class="about-section">
+                <h2>Architecture Highlights</h2>
+                
+                <h3>Our Architecture Flow</h3>
+                <div class="architecture-flow">
+User
+ ↓
+Service (rules + state management)
+ ↓
+Agent (LLM reasoning with tool selection)
+ ↓
+Tools (execution)
+ ↓
+Service (state update + validation)
+ ↓
+Response
+                </div>
+
+                <p>Instead of the simpler but more fragile: <code>User → LLM → Tool → Response</code></p>
+
+                <div class="oop-principles">
+                    <div class="oop-card">
+                        <h4>Agent Layer</h4>
+                        <p>Responsible for reasoning and decision-making</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Tool Layer</h4>
+                        <p>Encapsulating side effects (search, quiz generation, validation, analysis)</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Intent Routing</h4>
+                        <p>Maps user input to the correct capability</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Stateless Service</h4>
+                        <p>Easy to scale or swap components</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Thin Presentation</h4>
+                        <p>Flask app cleanly decoupled from agent logic</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="about-section">
+                <h2>Why Tool-Calling Agent Instead of ReAct?</h2>
+                
+                <p>
+                    We chose <strong>tool-calling agent architecture</strong> over ReAct for production-grade reliability and maintainability. 
+                    This is an intentional design choice, not a limitation.
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Dimension</th>
+                            <th>Tool-Calling Agent (Our Design)</th>
+                            <th>ReAct Agent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Agent Type</strong></td>
+                            <td>Tool-calling agent</td>
+                            <td>ReAct agent</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Reasoning Visibility</strong></td>
+                            <td>Hidden (clean responses)</td>
+                            <td>Explicit (reasoning leaks)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tool Invocation</strong></td>
+                            <td>API-managed</td>
+                            <td>Text-managed</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Production Readiness</strong></td>
+                            <td><strong>High</strong></td>
+                            <td>Low</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Prompt Length</strong></td>
+                            <td>Moderate</td>
+                            <td>Very long</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fragility</strong></td>
+                            <td><strong>Low</strong></td>
+                            <td>High</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Token Efficiency</strong></td>
+                            <td><strong>Efficient</strong></td>
+                            <td>Expensive</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hallucination Risk</strong></td>
+                            <td><strong>Lower</strong></td>
+                            <td>Higher</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Maintainability</strong></td>
+                            <td><strong>Good</strong></td>
+                            <td>Poor</td>
+                        </tr>
+                        <tr>
+                            <td><strong>UI / API Integration</strong></td>
+                            <td><strong>Clean</strong></td>
+                            <td>Messy</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Best Use Case</strong></td>
+                            <td><strong>Real product</strong></td>
+                            <td>Learning / demo</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="advantage">
+                    <h3>Key Advantages for This Project:</h3>
+                    <ul>
+                        <li><strong>Service controls rules and state:</strong> Business logic lives in code, not prompts</li>
+                        <li><strong>Predictable behavior:</strong> Clear tool mapping and explicit constraints</li>
+                        <li><strong>Clean final answers:</strong> No reasoning leaks to users</li>
+                        <li><strong>Easier debugging:</strong> State transitions and validation are explicit</li>
+                        <li><strong>Better maintainability:</strong> Rules can evolve in code, not embedded in prompts</li>
+                    </ul>
+                </div>
+
+                <p>
+                    <strong>What we intentionally sacrifice:</strong> Introspectability (seeing the LLM's reasoning). 
+                    In production, correctness and constraints matter more than verbose reasoning.
+                </p>
+            </div>
+
+            <div class="about-section">
+                <h2>OOP Principles Applied</h2>
+                
+                <div class="oop-principles">
+                    <div class="oop-card">
+                        <h4>Single Responsibility</h4>
+                        <p>Each class has one clear purpose (e.g., <code>QuizController</code> manages quiz state, <code>SimilarityQueryAnalyzer</code> decides exclusions)</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Separation of Decision & Action</h4>
+                        <p>Classes either decide (e.g., <code>SimilarityQueryAnalyzer</code>) or act (e.g., <code>MovieSearchTool</code>), but not both—unless they are Agents</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Dependency Inversion</h4>
+                        <p>Dependencies are injected, not hardcoded</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Encapsulation</h4>
+                        <p>Internal logic and state are properly encapsulated</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Factory Pattern</h4>
+                        <p>Tools and components are created via factories</p>
+                    </div>
+                    <div class="oop-card">
+                        <h4>Strategy Pattern</h4>
+                        <p>Different question generators for quiz types</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="about-section">
+                <h2>Intended Limitations & Design Trade-offs</h2>
+                
+                <div class="limitation">
+                    <h3>Known Limitations (By Design):</h3>
+                    <ul>
+                        <li><strong>Restricted question types:</strong> The tool-calling architecture handles specific, well-defined query types (search, comparison, quizzes, statistics) rather than open-ended reasoning. ReAct can handle more diverse questions, but at the cost of reliability.</li>
+                        <li><strong>Limited dataset:</strong> This demo uses a small CSV dataset for demonstration. A production system would use a full movie database.</li>
+                        <li><strong>No open-ended reasoning:</strong> Unlike ReAct, we don't support arbitrary multi-step reasoning chains. This is intentional—we prefer controlled, predictable behavior.</li>
+                        <li><strong>Fixed tool set:</strong> Only predefined tools are available (movie search, statistics, quiz generation, etc.). New capabilities require code changes, not just prompt engineering.</li>
+                    </ul>
+                </div>
+
+                <div class="advantage">
+                    <h3>Why These Limitations Are Acceptable:</h3>
+                    <p>
+                        <strong>This structure is more robust despite these limitations</strong> because:
+                    </p>
+                    <ul>
+                        <li><strong>Predictability:</strong> We know exactly what the system can and cannot do</li>
+                        <li><strong>Debugging:</strong> Issues can be traced through code paths, not hidden in LLM reasoning</li>
+                        <li><strong>Testing:</strong> Each component can be tested in isolation</li>
+                        <li><strong>Evolution:</strong> New features are added through structured code changes, not prompt tweaking</li>
+                        <li><strong>Production readiness:</strong> The system behaves consistently and doesn't "hallucinate" capabilities</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="about-section">
+                <h2>Future Extensibility</h2>
+                
+                <p>
+                    The architecture is designed to grow. In a production environment, the service can easily be extended with:
+                </p>
+                <ul>
+                    <li>Additional tools (external APIs, vector search, RAG, analytics)</li>
+                    <li>More agents or collaborative workflows</li>
+                    <li>Persistent memory or user profiles</li>
+                    <li>Observability and guardrails</li>
+                    <li>New query types (added through structured intent routing, not prompt changes)</li>
+                </ul>
+                
+                <p>
+                    <strong>The key point:</strong> The architecture is designed to grow, not to be rewritten.
+                </p>
+            </div>
+
+            <div class="about-section">
+                <h2>Why This Was Built</h2>
+                
+                <p>This project goes beyond surface-level "agent demos" to deeply understand:</p>
+                <ul>
+                    <li>When something is truly agentic vs just tool-calling</li>
+                    <li>How to design AI systems that remain maintainable, testable, and extensible</li>
+                    <li>How OOP and classic software engineering principles still matter in AI systems</li>
+                    <li>The trade-offs between flexibility (ReAct) and reliability (tool-calling)</li>
+                </ul>
+            </div>
+
+            <div class="about-section">
+                <h2>Author</h2>
+                <p>
+                    <strong>Alireza Barzin Zanganeh</strong><br>
+                    Website: <a href="https://www.zanganehai.com/about" target="_blank" class="code-link">zanganehai.com</a>
+                </p>
+                <div style="margin: 25px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #24292e; text-align: center;">
+                    <h3 style="margin-top: 0; color: #2c3e50;">Follow for Updates</h3>
+                    <p style="margin: 10px 0; color: #666;">
+                        Follow me on GitHub to stay updated on this project and future ML/AI work.
+                    </p>
+                    <a href="https://github.com/abzanganeh" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #24292e; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 1em; transition: background 0.2s; margin-top: 10px;">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        Follow @abzanganeh on GitHub
+                    </a>
+                    <p style="margin: 15px 0 0 0; font-size: 0.9em; color: #666;">
+                        Get notified of new features, technical deep-dives, and future projects.
+                    </p>
+                </div>
+                <p>
+                    If you're interested in agent architecture, tool design, or production-grade AI systems, 
+                    I'd be happy to discuss or get feedback.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

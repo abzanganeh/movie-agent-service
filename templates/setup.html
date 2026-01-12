@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Agent Service - Setup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .setup-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        .setup-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .setup-header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .required {
+            color: #e74c3c;
+        }
+        .submit-button {
+            width: 100%;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .submit-button:hover {
+            background: #5568d3;
+        }
+        .submit-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #fcc;
+            margin-bottom: 20px;
+        }
+        .info-box {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        .info-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="setup-header">
+            <h1>Movie Agent Service</h1>
+            <p>First-Time Setup</p>
+        </div>
+
+        {% if error %}
+        <div class="error-message">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <div class="info-box">
+            <p><strong>Welcome!</strong> Let's configure your Movie Agent Service.</p>
+            <p>Your API keys will be encrypted and stored securely on this machine.</p>
+        </div>
+
+        <form method="POST" action="/setup" id="setup-form">
+            <!-- LLM Provider Selection -->
+            <div class="form-group">
+                <label for="llm_provider">
+                    LLM Provider <span class="required">*</span>
+                </label>
+                <select name="llm_provider" id="llm_provider" required onchange="updateRequiredFields()">
+                    <option value="">-- Select Provider --</option>
+                    <option value="groq">Groq (Fast, Recommended)</option>
+                    <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                </select>
+                <small>Choose your LLM provider for generating responses</small>
+            </div>
+
+            <!-- Groq API Key -->
+            <div class="form-group" id="groq-key-group" style="display: none;">
+                <label for="groq_api_key">
+                    Groq API Key <span class="required">*</span>
+                </label>
+                <input 
+                    type="password" 
+                    name="groq_api_key" 
+                    id="groq_api_key"
+                    placeholder="gsk_your_groq_api_key_here"
+                >
+                <small>
+                    Get your key from: 
+                    <a href="https://console.groq.com/keys" target="_blank">Groq Console</a>
+                </small>
+            </div>
+
+            <!-- OpenAI API Key (for LLM if selected) -->
+            <div class="form-group" id="openai-llm-key-group" style="display: none;">
+                <label for="openai_llm_api_key">
+                    OpenAI API Key (for LLM) <span class="required">*</span>
+                </label>
+                <input 
+                    type="password" 
+                    name="openai_llm_api_key" 
+                    id="openai_llm_api_key"
+                    placeholder="sk-your_openai_api_key_here"
+                >
+                <small>
+                    Get your key from: 
+                    <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
+                </small>
+            </div>
+
+            <!-- OpenAI API Key (for Embeddings - Always Required) -->
+            <div class="form-group">
+                <label for="openai_api_key">
+                    OpenAI API Key (for Embeddings) <span class="required">*</span>
+                </label>
+                <input 
+                    type="password" 
+                    name="openai_api_key" 
+                    id="openai_api_key"
+                    placeholder="sk-your_openai_api_key_here"
+                    required
+                >
+                <small>
+                    Required for semantic search. Get from: 
+                    <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
+                </small>
+            </div>
+
+            <!-- LLM Model -->
+            <div class="form-group" id="llm-model-group" style="display: none;">
+                <label for="llm_model">LLM Model</label>
+                <select name="llm_model" id="llm_model">
+                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fast)</option>
+                    <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile (Better Quality)</option>
+                    <option value="llama-3.2-3b">llama-3.2-3b (Lightweight)</option>
+                </select>
+                <small>Model selection (Groq only)</small>
+            </div>
+
+            <!-- Optional Settings -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="enable_vision" value="true" checked>
+                    Enable Vision (Poster Analysis)
+                </label>
+                <small>Allow analyzing movie posters (requires BLIP model download on first use)</small>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="enable_fuzzy_matching" value="true" checked>
+                    Enable Fuzzy Matching
+                </label>
+                <small>Automatically correct typos in queries</small>
+            </div>
+
+            <button type="submit" class="submit-button" id="submit-btn">
+                Save Configuration & Start
+            </button>
+        </form>
+    </div>
+
+    <script>
+        function updateRequiredFields() {
+            const provider = document.getElementById('llm_provider').value;
+            const groqGroup = document.getElementById('groq-key-group');
+            const openaiLLMGroup = document.getElementById('openai-llm-key-group');
+            const modelGroup = document.getElementById('llm-model-group');
+            const groqKey = document.getElementById('groq_api_key');
+            const openaiLLMKey = document.getElementById('openai_llm_api_key');
+            const modelSelect = document.getElementById('llm_model');
+
+            // Reset
+            groqGroup.style.display = 'none';
+            openaiLLMGroup.style.display = 'none';
+            modelGroup.style.display = 'none';
+            groqKey.required = false;
+            openaiLLMKey.required = false;
+
+            if (provider === 'groq') {
+                groqGroup.style.display = 'block';
+                modelGroup.style.display = 'block';
+                groqKey.required = true;
+            } else if (provider === 'openai') {
+                openaiLLMGroup.style.display = 'block';
+                openaiLLMKey.required = true;
+                // Update model options for OpenAI
+                modelSelect.innerHTML = `
+                    <option value="gpt-4">GPT-4 (Best Quality)</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Faster)</option>
+                `;
+            }
+        }
+
+        // Show/hide model selection based on provider
+        document.getElementById('llm_provider').addEventListener('change', function() {
+            const provider = this.value;
+            const modelGroup = document.getElementById('llm-model-group');
+            const modelSelect = document.getElementById('llm_model');
+            
+            if (provider === 'groq') {
+                modelGroup.style.display = 'block';
+                modelSelect.innerHTML = `
+                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fast, Recommended)</option>
+                    <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile (Better Quality)</option>
+                    <option value="llama-3.2-3b">llama-3.2-3b (Lightweight)</option>
+                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Large Context)</option>
+                `;
+            } else if (provider === 'openai') {
+                modelGroup.style.display = 'block';
+                modelSelect.innerHTML = `
+                    <option value="gpt-4">GPT-4 (Best Quality)</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Faster, Cheaper)</option>
+                `;
+            } else {
+                modelGroup.style.display = 'none';
+            }
+        });
+
+        // Form submission
+        document.getElementById('setup-form').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Prevent default form submission
+            
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            
+            // Collect form data
+            const formData = new FormData(this);
+            const data = {};
+            
+            // Convert FormData to JSON object
+            for (const [key, value] of formData.entries()) {
+                // Handle checkboxes
+                if (key === 'enable_vision' || key === 'enable_fuzzy_matching' || key === 'enable_memory') {
+                    data[key] = value === 'true';
+                } else if (value) {
+                    data[key] = value;
+                }
+            }
+            
+            // Remove empty values
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            try {
+                const response = await fetch('/setup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Configuration saved successfully! Redirecting...');
+                    window.location.href = '/';
+                } else {
+                    alert(`Error: ${result.error || 'Unknown error'}`);
+                    btn.disabled = false;
+                    btn.textContent = 'Save Configuration & Start';
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = 'Save Configuration & Start';
+            }
+        });
+    </script>
+</body>
+</html>
+
