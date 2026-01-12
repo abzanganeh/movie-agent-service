@@ -50,6 +50,13 @@ app = Flask(__name__)
 # we need a fixed key so sessions persist across deployments/restarts
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "movie-agent-service-secret-key-2024-fixed-for-spaces")
 
+# Configure session cookies for Hugging Face Spaces
+# Spaces uses HTTPS and may have iframe restrictions, so we need proper cookie settings
+app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Security
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Allow cross-site (needed if Spaces uses iframe)
+app.config['SESSION_COOKIE_NAME'] = 'movie_agent_session'  # Explicit name
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -176,6 +183,11 @@ def chat():
         if 'session_id' not in session:
             session['session_id'] = str(uuid.uuid4())
             logger.info(f"Created new session: {session['session_id']}")
+            # Debug: log session cookie info
+            logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}, "
+                       f"SameSite: {app.config.get('SESSION_COOKIE_SAMESITE')}")
+        else:
+            logger.info(f"Reusing existing session: {session['session_id']}")
         session_id = session['session_id']
         
         logger.info(f"Chat query - Session: {session_id}, Intent: {intent.name}")
