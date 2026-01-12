@@ -45,7 +45,12 @@ from movie_agent.security import InputValidator, FileValidator, ValidationError
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(32).hex())
+# Use fixed secret key for session persistence
+# If FLASK_SECRET_KEY env var is set, use it; otherwise use a fixed default
+# IMPORTANT: Don't regenerate on each startup - sessions won't persist!
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "movie-agent-service-secret-key-2024")
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
 # Setup logging
 logging.basicConfig(
@@ -100,7 +105,7 @@ def _initialize_agent_from_env():
             memory_max_turns=int(os.getenv("MEMORY_MAX_TURNS", "10")),
             faiss_index_path="movie_vectorstore",
             movies_csv_path="data/movies.csv",
-            warmup_on_start=True,
+            warmup_on_start=False,  # MovieAgentApp.initialize() handles warmup after setup
             verbose=False,
             device=os.getenv("DEVICE", "auto"),
             force_cpu=os.getenv("FORCE_CPU", "false").lower() == "true",
@@ -117,7 +122,11 @@ def _initialize_agent_from_env():
 
 
 # Initialize on startup (for Spaces)
-_initialize_agent_from_env()
+# Don't fail if initialization fails - will retry on first request
+try:
+    _initialize_agent_from_env()
+except Exception as e:
+    logger.error(f"Initial startup initialization failed: {e}. Will retry on first request.", exc_info=True)
 
 
 @app.route("/")
@@ -131,6 +140,18 @@ def index():
 def chat():
     """Chat endpoint."""
     try:
+        # Try to initialize if not already initialized
+        if agent_app is None:
+            logger.info("Agent not initialized, attempting initialization...")
+            try:
+                _initialize_agent_from_env()
+            except Exception as e:
+                logger.error(f"Failed to initialize agent: {e}", exc_info=True)
+                return jsonify({
+                    "error": "Agent initialization failed. Please check API keys in Space settings.",
+                    "details": str(e)
+                }), 500
+        
         if agent_app is None:
             return jsonify({"error": "Agent not initialized. Please check configuration."}), 500
         
@@ -190,6 +211,18 @@ def chat():
 @limiter.limit("10 per minute")
 def poster():
     """Poster analysis endpoint."""
+    # Try to initialize if not already initialized
+    if agent_app is None:
+        logger.info("Agent not initialized, attempting initialization...")
+        try:
+            _initialize_agent_from_env()
+        except Exception as e:
+            logger.error(f"Failed to initialize agent: {e}", exc_info=True)
+            return jsonify({
+                "error": "Agent initialization failed. Please check API keys in Space settings.",
+                "details": str(e)
+            }), 500
+    
     if agent_app is None:
         return jsonify({"error": "Agent not initialized. Please check configuration."}), 500
     
@@ -277,6 +310,17 @@ def clear_poster():
     except Exception as e:
         logger.error(f"Error clearing poster state: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/reset-config", methods=["POST"])
+def reset_config():
+    """Reset configuration endpoint (for Spaces, config is via environment variables)."""
+    # In Spaces deployment, configuration is via environment variables, not a config file
+    # This endpoint exists for UI compatibility but doesn't do anything
+    return jsonify({
+        "status": "info",
+        "message": "Configuration is managed via environment variables in Spaces. No reset needed."
+    })
 
 
 if __name__ == "__main__":
